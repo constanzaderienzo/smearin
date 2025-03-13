@@ -4,6 +4,8 @@
 #include <maya/MFnPlugin.h>
 #include <maya/MPxCommand.h>
 #include <maya/MIOStream.h>
+#include <maya/MGlobal.h>
+
 
 class helloWorld : public MPxCommand
 {
@@ -13,7 +15,7 @@ public:
 };
 
 MStatus helloWorld::doIt(const MArgList& args) {
-    cout << "Hello World " << args.asString(0).asChar() << endl;
+    MGlobal::displayInfo("Hello World is working");
     return MS::kSuccess;
 }
 
@@ -23,7 +25,7 @@ void* helloWorld::creator() {
 
 MStatus initializePlugin(MObject obj) {
     MFnPlugin plugin(obj, "Autodesk", "1.0", "Any");
-    cout << "Initializing plugin..." << endl;
+    MGlobal::displayInfo("Initializing plugin...");
     plugin.registerCommand("HelloWorld", helloWorld::creator);
     return MS::kSuccess;
 }

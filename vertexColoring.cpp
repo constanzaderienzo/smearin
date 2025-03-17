@@ -7,9 +7,28 @@
 #include <maya/MColorArray.h>
 #include <maya/MIntArray.h>
 #include <maya/MStatus.h>
+#include <maya/MMatrix.h>
 #include <cstdlib> // for rand()
+#include "smear.h"
+#include "smearNode.h"
 
 class VertexColorCommand : public MPxCommand {
+private: 
+    MColor motionOffsetToColor(const MVector& offset) {
+        float magnitude = static_cast<float>(offset.length());
+
+        if (magnitude == 0.0f) {
+            return MColor(0.0f, 0.0f, 0.0f, 1.0f);  // No motion -> black
+        }
+
+        // Normalize offset to range [0,1] for color mapping
+        float r = fabs(offset.x) / magnitude;
+        float g = fabs(offset.y) / magnitude;
+        float b = fabs(offset.z) / magnitude;
+
+        return MColor(r, g, b, 1.0f);  // RGB mapped to motion direction
+    }
+
 public:
     MStatus doIt(const MArgList&) override {
         MSelectionList selection;
@@ -29,19 +48,36 @@ public:
         }
 
         MFnMesh meshFn(dagPath);
+        int numVertices = meshFn.numVertices();
+
+        // Step 1: Get Motion Offsets
+        MotionOffsetSimple motionOffsets;
+        MStatus status = Smear::computeMotionOffsetsSimple(dagPath.node(), motionOffsets);
+        if (!status) {
+            MGlobal::displayError("Failed to compute motion offsets.");
+            return status;
+        }
+
+        // Step 2: Compute Colors Based on Motion Offsets
         MIntArray vertexIndices;
         MColorArray colors;
+        colors.setLength(numVertices);
 
-        int numVertices = meshFn.numVertices();
+        int lastFrameIndex = static_cast<int>(motionOffsets.motionOffsets.size()) - 1;
+        if (lastFrameIndex < 0) {
+            MGlobal::displayError("No motion offset data available.");
+            return MS::kFailure;
+        }
+
+        const MVectorArray& lastFrameOffsets = motionOffsets.motionOffsets[lastFrameIndex];
+
         for (int i = 0; i < numVertices; i++) {
-            float r = static_cast<float>(rand()) / RAND_MAX;
-            float g = static_cast<float>(rand()) / RAND_MAX;
-            float b = static_cast<float>(rand()) / RAND_MAX;
-            colors.append(MColor(r, g, b, 1.0f)); // RGBA
+            colors[i] = motionOffsetToColor(lastFrameOffsets[i]);  // Use helper function
             vertexIndices.append(i);
         }
 
-        MStatus status = meshFn.setVertexColors(colors, vertexIndices);
+        // Step 3: Apply Vertex Colors to Mesh
+        status = meshFn.setVertexColors(colors, vertexIndices);
         if (!status) {
             MGlobal::displayError("Failed to apply vertex colors.");
             return status;
@@ -58,11 +94,38 @@ public:
 
 // Plugin registration
 MStatus initializePlugin(MObject obj) {
+    MStatus   status = MStatus::kSuccess;
     MFnPlugin plugin(obj, "SMEARin", "1.0", "Any");
-    return plugin.registerCommand("colorVertices", VertexColorCommand::creator);
+    
+    // Register Command
+    status = plugin.registerCommand( "colorVertices", VertexColorCommand::creator );
+    if (!status) {
+        status.perror("registerCommand");
+        return status;
+    }
+
+    status = plugin.registerNode("SmearNode", SmearNode::id,
+        SmearNode::creator, SmearNode::initialize);
+
+    if (!status) {
+        status.perror("registerNode");  
+        return status;
+    }
 }
 
 MStatus uninitializePlugin(MObject obj) {
+    MStatus   status = MStatus::kSuccess;
     MFnPlugin plugin(obj);
-    return plugin.deregisterCommand("colorVertices");
+
+    status = plugin.deregisterCommand("colorVertices");
+    if (!status) {
+        status.perror("deregisterCommand");
+        return status;
+    }
+
+    status = plugin.deregisterNode(SmearNode::id);
+    if (!status) {
+        status.perror("deregisterNode");
+        return status;
+    }
 }

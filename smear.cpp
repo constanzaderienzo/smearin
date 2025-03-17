@@ -107,6 +107,7 @@ MStatus Smear::calculateCentroidOffsetFromPivot(MObject& object, MVector& centro
 MStatus Smear::computeCentroidTrajectory(MObject& object, std::vector<MVectorArray>& centroidPositions) {
     MStatus status;
 
+    // Find the start and end frame to determine the range for which we compute trajectory 
     double startFrame, endFrame;
     status = extractAnimationFrameRange(object, startFrame, endFrame);
     McheckErr(status, "Failed to extract animation frame range.");
@@ -114,15 +115,21 @@ MStatus Smear::computeCentroidTrajectory(MObject& object, std::vector<MVectorArr
     int numFrames = static_cast<int>(endFrame - startFrame + 1);
     centroidPositions.resize(numFrames);
 
+    // Compute the centroid offset based on the first frame so that we can use this to 
+    // quickly find the centroid based on pivot location 
+    // Centroid is found through average position of vertex positions
     MVector centroidOffset;
     status = calculateCentroidOffsetFromPivot(object, centroidOffset);
     McheckErr(status, "Failed to calculate centroid offset.");
 
+    // Parse all the transformations from each frame to see how the pivot moves from animation 
     std::vector<MMatrix> transformationMatrices;
     status = computeWorldTransformPerFrame(object, transformationMatrices);
     McheckErr(status, "Failed to compute world transforms.");
 
     for (int frame = 0; frame < numFrames; ++frame) {
+        // Find how the position of the centroid changes based on the pivot's transformations (how it moves, rotates, scales) 
+        // by multiplying the transform to centroid offset 
         MPoint transformedOffset = MPoint(centroidOffset) * transformationMatrices[frame];
         centroidPositions[frame].append(MVector(transformedOffset));
     }
@@ -157,6 +164,8 @@ MStatus Smear::computeCentroidVelocity(MObject& object, std::vector<MVector>& ce
 MStatus Smear::computeMotionOffsetsSimple(MObject& object, MotionOffsetSimple& motionOffsets) {
     MStatus status;
 
+    // Just passing along centroid velocity for now 
+    // No real motion offset calculation yet 
     std::vector<MVector> centroidVelocities;
     status = computeCentroidVelocity(object, centroidVelocities, motionOffsets.startFrame, motionOffsets.endFrame);
     McheckErr(status, "Failed to compute centroid velocity.");

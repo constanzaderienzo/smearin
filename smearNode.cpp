@@ -24,45 +24,31 @@ void* SmearNode::creator()
     return new SmearNode;
 }
 
-MStatus SmearNode::initialize()
-{
+MStatus SmearNode::initialize() {
     MFnUnitAttribute unitAttr;
     MFnTypedAttribute typedAttr;
-    MStatus returnStatus;
+    MStatus status;
 
-    //-------------- Attribute creation statements -----------------//
-    SmearNode::time = unitAttr.create("time", "tm",
-        MFnUnitAttribute::kTime,
-        0.0, &returnStatus);
-    McheckErr(returnStatus, "ERROR creating SmearNode time attribute\n");
+    // Time attribute
+    time = unitAttr.create("time", "tm", MFnUnitAttribute::kTime, 0.0);
+    addAttribute(time);
 
-    // Input Mesh
-    SmearNode::inputMesh = typedAttr.create("inputMesh", "inMesh", MFnData::kMesh, &returnStatus);
-    typedAttr.setStorable(true); 
-    McheckErr(returnStatus, "ERROR creating input mesh attribute\n");
+    // Input mesh
+    inputMesh = typedAttr.create("inputMesh", "in", MFnData::kMesh);
+    typedAttr.setStorable(true);
+    addAttribute(inputMesh);
 
-    // Output Mesh
-    SmearNode::outputMesh = typedAttr.create("outputMesh", "outMesh", MFnData::kMesh, &returnStatus);
-    typedAttr.setWritable(false); // prevents the user (or Maya) from modifying the attribute manually, 
-                                  // must be computed by the node 
-    typedAttr.setStorable(false); // The output mesh is generated at runtime and doesn�t need to be stored
-    McheckErr(returnStatus, "ERROR creating output mesh attribute\n");
+    // Output mesh
+    outputMesh = typedAttr.create("outputMesh", "out", MFnData::kMesh);
+    typedAttr.setWritable(false);
+    typedAttr.setStorable(false);
+    addAttribute(outputMesh);
 
-    //-------------- Add attribute statements -----------------//
-    returnStatus = addAttribute(SmearNode::time);
-    McheckErr(returnStatus, "ERROR adding time attribute\n");
+    // Affects relationships
+    attributeAffects(time, outputMesh);
+    attributeAffects(inputMesh, outputMesh);
 
-    returnStatus = addAttribute(SmearNode::inputMesh);
-    McheckErr(returnStatus, "ERROR adding input mesh attribute\n");
-
-    returnStatus = addAttribute(SmearNode::outputMesh);
-    McheckErr(returnStatus, "ERROR adding output mesh attribute\n");
-
-    //-------------- Attribute affect statements -----------------//
-    attributeAffects(SmearNode::time, SmearNode::outputMesh);
-    attributeAffects(SmearNode::inputMesh, SmearNode::outputMesh);
-
-    return MStatus();
+    return MS::kSuccess;
 }
 
 //MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data)
@@ -169,6 +155,12 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     if (plug != outputMesh) return MS::kUnknownParameter;
 
     MStatus status;
+
+    // +++ Get time value +++
+    MTime currentTime = data.inputValue(time, &status).asTime();
+    McheckErr(status, "Failed to get time value");
+    double frame = currentTime.as(MTime::kFilm);  // Get time in frames
+
     MDataHandle inputHandle = data.inputValue(inputMesh, &status);
     if (!status) {
         MGlobal::displayError("Failed to get input mesh handle");
@@ -196,21 +188,35 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     MFnMesh outputFn(copiedMesh, &status);
     McheckErr(status, "Output mesh init failed");
 
-    // Create color set if missing
+    const int numVertices = outputFn.numVertices();
+    if (numVertices == 0) {
+        MGlobal::displayError("Mesh has no vertices");
+        return MS::kFailure;
+    }
+
+    MColorArray colors(numVertices);
+    MIntArray vtxIndices(numVertices);
+
+    // +++ Time-based color calculation +++
+    MColor color = computeColor(frame);
+    for (int i = 0; i < numVertices; ++i) {
+        colors.set(color, i);
+        vtxIndices[i] = i;
+    }
+
+    MGlobal::displayInfo("SmearNode compute() triggered! Time: " + MString() + MString(std::to_string(frame).c_str()));
+
+    // Create/update color set
     MString colorSet("smearSet");
     outputFn.createColorSetWithName(colorSet);
     outputFn.setCurrentColorSetName(colorSet);
 
-    // Get time value
-    MTime currentTime = data.inputValue(time).asTime();
-    double frame = currentTime.as(MTime::uiUnit());
-    MColorArray colors(outputFn.numVertices(), computeColor(frame));
-
-    MIntArray vtxIndices(outputFn.numVertices());
-    for (int i = 0; i < vtxIndices.length(); ++i) vtxIndices[i] = i;
-
+    // +++ Apply colors to specific color set with time variation +++
     status = outputFn.setVertexColors(colors, vtxIndices);
     McheckErr(status, "Failed to set colors");
+
+    // Force viewport update
+    outputFn.updateSurface();
 
     // Assign output
     MDataHandle outputHandle = data.outputValue(outputMesh);
@@ -219,7 +225,6 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
 
     return MS::kSuccess;
 }
-
 
 
 MColor SmearNode::computeColor(double frame)

@@ -12,25 +12,29 @@
 #include "smear.h"
 #include "smearNode.h"
 
-class VertexColorCommand : public MPxCommand {
+class PluginMain : public MPxCommand {
 private: 
-    MColor motionOffsetToColor(const MVector& offset) {
-        float magnitude = static_cast<float>(offset.length());
+    MColor PluginMain::motionOffsetToColor(const MVector& offset) {
+        // Normalize the offset to get the direction
+        MVector direction = offset.normal();
 
-        if (magnitude == 0.0f) {
-            return MColor(0.0f, 0.0f, 0.0f, 1.0f);  // No motion -> black
-        }
+        // Map direction to RGB colors
+        float r = fabs(direction.x); // X direction -> Red
+        float g = fabs(direction.y); // Y direction -> Green
+        float b = fabs(direction.z); // Z direction -> Blue
 
-        // Normalize offset to range [0,1] for color mapping
-        float r = fabs(offset.x) / magnitude;
-        float g = fabs(offset.y) / magnitude;
-        float b = fabs(offset.z) / magnitude;
+        // Ensure values are within [0, 1]
+        r = std::min(std::max(r, 0.0f), 1.0f);
+        g = std::min(std::max(g, 0.0f), 1.0f);
+        b = std::min(std::max(b, 0.0f), 1.0f);
 
-        return MColor(r, g, b, 1.0f);  // RGB mapped to motion direction
+        return MColor(r, g, b, 1.0f); // Return the color
     }
 
 public:
     MStatus doIt(const MArgList&) override {
+        MGlobal::displayInfo("Command executed!");
+
         MSelectionList selection;
         MGlobal::getActiveSelectionList(selection);
         
@@ -38,6 +42,8 @@ public:
             MGlobal::displayError("No mesh selected!");
             return MS::kFailure;
         }
+
+        MGlobal::displayInfo(MString("Selection Length: ") + selection.length());
 
         MDagPath dagPath;
         selection.getDagPath(0, dagPath);
@@ -47,18 +53,31 @@ public:
             return MS::kFailure;
         }
 
-        MFnMesh meshFn(dagPath);
-        int numVertices = meshFn.numVertices();
+        MGlobal::displayInfo("Mesh detected, proceeding with processing...");
+            
+        // Test extractAnimationFrameRange
+        double startFrame, endFrame;
+        MStatus status = Smear::extractAnimationFrameRange(dagPath.node(), startFrame, endFrame);
+        if (status == MS::kSuccess) {
+            MGlobal::displayInfo(MString("Start Frame: ") + startFrame);
+            MGlobal::displayInfo(MString("End Frame: ") + endFrame);
+        }
+        else {
+            MGlobal::displayError("Failed to extract animation frame range.");
+            return status;
+        }
 
         // Step 1: Get Motion Offsets
         MotionOffsetSimple motionOffsets;
-        MStatus status = Smear::computeMotionOffsetsSimple(dagPath.node(), motionOffsets);
+        status = Smear::computeMotionOffsetsSimple(dagPath.node(), motionOffsets);
         if (!status) {
             MGlobal::displayError("Failed to compute motion offsets.");
             return status;
         }
 
         // Step 2: Compute Colors Based on Motion Offsets
+        MFnMesh meshFn(dagPath);
+        int numVertices = meshFn.numVertices();
         MIntArray vertexIndices;
         MColorArray colors;
         colors.setLength(numVertices);
@@ -73,6 +92,8 @@ public:
 
         for (int i = 0; i < numVertices; i++) {
             colors[i] = motionOffsetToColor(lastFrameOffsets[i]);  // Use helper function
+            MGlobal::displayInfo(MString("Offset: ") + lastFrameOffsets[i].x + lastFrameOffsets[i].y + lastFrameOffsets[i].z);
+
             vertexIndices.append(i);
         }
 
@@ -88,7 +109,7 @@ public:
     }
 
     static void* creator() {
-        return new VertexColorCommand();
+        return new PluginMain();
     }
 };
 
@@ -98,7 +119,7 @@ MStatus initializePlugin(MObject obj) {
     MFnPlugin plugin(obj, "SMEARin", "1.0", "Any");
     
     // Register Command
-    status = plugin.registerCommand( "colorVertices", VertexColorCommand::creator );
+    status = plugin.registerCommand( "colorVertices", PluginMain::creator );
     if (!status) {
         status.perror("registerCommand");
         return status;

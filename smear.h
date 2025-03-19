@@ -20,7 +20,6 @@ class Smear
 private:
     // If this function does not compile, make sure to add "OpenMayaAnim.lib" in 
     // Project Properties -> Configuration Properties -> Linker -> Input -> Additional Dependencies
-    static MStatus extractAnimationFrameRange(const MObject& obj, double& startFrame, double& endFrame);
     static MStatus computeWorldTransformPerFrame(const MObject& object, std::vector<MMatrix>& transformationMatrices);
     static MStatus calculateCentroidOffsetFromPivot(MObject& object, MVector& centroidOffset);
     static MStatus computeCentroidTrajectory(MObject& object, std::vector<MVectorArray>& centroidPositions);
@@ -28,4 +27,6 @@ private:
 
 public:
     static MStatus computeMotionOffsetsSimple(MObject& object, MotionOffsetSimple& motionOffsets); 
+    static MStatus extractAnimationFrameRange(const MObject& obj, double& startFrame, double& endFrame);
+
 };

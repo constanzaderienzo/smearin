@@ -1,4 +1,4 @@
-    #include "smearNode.h"
+#include "smearNode.h"
 #include <maya/MFnMesh.h>
 #include <maya/MFnUnitAttribute.h>
 #include <maya/MFnTypedAttribute.h>
@@ -6,6 +6,12 @@
 #include <maya/MGlobal.h>
 #include <maya/MFnMeshData.h>
 #include <maya/MPointArray.h>
+#include <maya/MVectorArray.h>
+#include <maya/MItMeshVertex.h>
+#include <maya/MAnimControl.h>
+#include <maya/MTime.h>
+#include <maya/MFnNumericAttribute.h>
+#include "smear.h" // Include the Smear header
 
 #define McheckErr(stat,msg)			\
 	if ( MS::kSuccess != stat ) {	\
@@ -17,7 +23,6 @@ MTypeId SmearNode::id(0x98520); // Random id
 MObject SmearNode::time;
 MObject SmearNode::inputMesh;
 MObject SmearNode::outputMesh;
-MColorArray SmearNode::currentColors; 
 
 void* SmearNode::creator()
 {
@@ -27,6 +32,7 @@ void* SmearNode::creator()
 MStatus SmearNode::initialize() {
     MFnUnitAttribute unitAttr;
     MFnTypedAttribute typedAttr;
+    MFnNumericAttribute numericAttr;
     MStatus status;
 
     // Time attribute
@@ -43,6 +49,7 @@ MStatus SmearNode::initialize() {
     typedAttr.setWritable(false);
     typedAttr.setStorable(false);
     addAttribute(outputMesh);
+
 
     // Affects relationships
     attributeAffects(time, outputMesh);
@@ -94,24 +101,37 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kFailure;
     }
 
+    // +++ Compute motion offsets using Smear functions +++
+    MotionOffsetSimple motionOffsets;
+    status = Smear::computeMotionOffsetsSimple(inputObj, motionOffsets);
+    McheckErr(status, "Failed to compute motion offsets");
+
+    // +++ Map motion offsets to colors +++
     MColorArray colors(numVertices);
     MIntArray vtxIndices(numVertices);
 
-    // +++ Time-based color calculation +++
-    MColor color = computeColor(frame);
+    // Find the motion offset data for the current frame
+    int frameIndex = static_cast<int>(frame) - static_cast<int>(motionOffsets.startFrame);
+    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
+        MGlobal::displayError("Current frame is out of range of the motion offset data");
+        return MS::kFailure;
+    }
+
+    const MVectorArray& currentFrameOffsets = motionOffsets.motionOffsets[frameIndex];
+
     for (int i = 0; i < numVertices; ++i) {
+        MVector offset = currentFrameOffsets[i];
+        MColor color = computeColor(offset);
         colors.set(color, i);
         vtxIndices[i] = i;
     }
-
-    MGlobal::displayInfo("SmearNode compute() triggered! Time: " + MString() + MString(std::to_string(frame).c_str()));
 
     // Create/update color set
     MString colorSet("smearSet");
     outputFn.createColorSetWithName(colorSet);
     outputFn.setCurrentColorSetName(colorSet);
 
-    // +++ Apply colors to specific color set with time variation +++
+    // +++ Apply colors to specific color set +++
     status = outputFn.setVertexColors(colors, vtxIndices);
     McheckErr(status, "Failed to set colors");
 
@@ -126,11 +146,10 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     return MS::kSuccess;
 }
 
-
-MColor SmearNode::computeColor(double frame)
-{
-    float r = 0.5f + 0.5f * std::sin(frame * 0.1f);
-    float g = 0.5f + 0.5f * std::sin(frame * 0.2f);
-    float b = 0.5f + 0.5f * std::sin(frame * 0.3f);
+MColor SmearNode::computeColor(const MVector& offset) {
+    // Map offset direction to color
+    float r = 0.5f + 0.5f * offset.x;
+    float g = 0.5f + 0.5f * offset.y;
+    float b = 0.5f + 0.5f * offset.z;
     return MColor(r, g, b, 1.0f);
 }

@@ -4,10 +4,13 @@
 /*
 *	createNode SmearNode;
 	connectAttr "time1.outTime" "SmearNode1.time";
-	connectAttr "Box001.outMesh" "SmearNode1.inputMesh";
+	connectAttr "pCube1.outMesh" "SmearNode1.inputMesh";
 
 	// Run this line after running above three lines to avoid errors 
-	connectAttr "SmearNode1.outputMesh" "Box001.inMesh";
+	if (`isConnected "polyCube1.output" "pCubeShape1.inMesh"`) {
+	disconnectAttr "polyCube1.output" "pCubeShape1.inMesh";
+}
+	connectAttr "SmearNode1.outputMesh" "pCube1.inMesh";
 */
 
 class SmearNode : public MPxNode
@@ -18,7 +21,7 @@ public:
 	static  void* creator();
 	static  MStatus initialize();
 	MStatus compute(const MPlug& plug, MDataBlock& data) override;
-	MColor computeColor(double frame); 
+	MColor computeColor(const MVector& offset);
 
 	static MTypeId id;  // Unique node ID
 	static MObject time; 

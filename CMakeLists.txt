@@ -6,11 +6,15 @@ project(${PROJECT_NAME})
 include($ENV{DEVKIT_LOCATION}/cmake/pluginEntry.cmake)
 
 set(SOURCE_FILES
-    vertexColoring.cpp
+    PluginMain.cpp
+    smear.cpp
+    smearNode.cpp
 )
 
 set(LIBRARIES
-    OpenMaya Foundation
+    OpenMaya 
+    Foundation
+    OpenMayaAnim
 )
 
 build_plugin()

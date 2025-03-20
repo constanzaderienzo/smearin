@@ -1,5 +1,6 @@
 #pragma once
 #include <maya/MPxNode.h>
+#include "smear.h"
 
 /*
 *	createNode SmearNode;
@@ -15,9 +16,15 @@
 
 class SmearNode : public MPxNode
 {
+private: 
+	// Caches motion offsets for simlpe objects. 
+	// TODO: Add a way to cache motion offsets for non-simple objects
+	MotionOffsetsSimple motionOffsetsSimple; 
+	// Tracks whether motion offsets are baked to avoid recomputation of offsets every frame
+	bool motionOffsetsBaked; 
 public:
-	SmearNode() {};
-	~SmearNode() override {};
+	SmearNode();
+	~SmearNode() override;
 	static  void* creator();
 	static  MStatus initialize();
 	MStatus compute(const MPlug& plug, MDataBlock& data) override;

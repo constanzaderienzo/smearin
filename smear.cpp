@@ -232,7 +232,7 @@ MStatus Smear::computeCentroidVelocity(MObject& object, std::vector<MVector>& ce
     return MS::kSuccess;
 }
 
-MStatus Smear::computeMotionOffsetsSimple(MObject& object, MotionOffsetSimple& motionOffsets) {
+MStatus Smear::computeMotionOffsetsSimple(MObject& object, MotionOffsetsSimple& motionOffsets) {
     MStatus status;
 
     // Just passing along centroid velocity for now 

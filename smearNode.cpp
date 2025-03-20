@@ -24,6 +24,13 @@ MObject SmearNode::time;
 MObject SmearNode::inputMesh;
 MObject SmearNode::outputMesh;
 
+SmearNode::SmearNode():
+    motionOffsetsSimple(), motionOffsetsBaked(false) 
+{}
+
+SmearNode::~SmearNode()
+{}
+
 void* SmearNode::creator()
 {
     return new SmearNode;
@@ -102,7 +109,7 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     }
 
     // +++ Compute motion offsets using Smear functions +++
-    MotionOffsetSimple motionOffsets;
+    MotionOffsetsSimple motionOffsets;
     status = Smear::computeMotionOffsetsSimple(inputObj, motionOffsets);
     McheckErr(status, "Failed to compute motion offsets");
 

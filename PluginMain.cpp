@@ -68,7 +68,7 @@ public:
         }
 
         // Step 1: Get Motion Offsets
-        MotionOffsetSimple motionOffsets;
+        MotionOffsetsSimple motionOffsets;
         status = Smear::computeMotionOffsetsSimple(dagPath.node(), motionOffsets);
         if (!status) {
             MGlobal::displayError("Failed to compute motion offsets.");

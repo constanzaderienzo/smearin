@@ -9,7 +9,7 @@
 using std::cout;
 using std::endl;
 
-struct MotionOffsetSimple {
+struct MotionOffsetsSimple {
     double startFrame;
     double endFrame;
     std::vector<MVectorArray> motionOffsets;  // 2D: motionOffsets[frame][vertex]
@@ -26,7 +26,7 @@ private:
     static MStatus computeCentroidVelocity(MObject& object, std::vector<MVector>& centroidVelocities, double& startFrame, double& endFrame);
 
 public:
-    static MStatus computeMotionOffsetsSimple(MObject& object, MotionOffsetSimple& motionOffsets); 
+    static MStatus computeMotionOffsetsSimple(MObject& object, MotionOffsetsSimple& motionOffsets); 
     static MStatus extractAnimationFrameRange(const MObject& obj, double& startFrame, double& endFrame);
 
 };

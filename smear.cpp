@@ -234,7 +234,7 @@ MStatus Smear::computeCentroidVelocity(MObject& object, std::vector<MVector>& ce
 
 MStatus Smear::computeMotionOffsetsSimple(MObject& object, MotionOffsetsSimple& motionOffsets) {
     MStatus status;
-
+    
     // Just passing along centroid velocity for now 
     // No real motion offset calculation yet 
     std::vector<MVector> centroidVelocities;
@@ -287,6 +287,32 @@ MStatus Smear::computeMotionOffsetsSimple(MObject& object, MotionOffsetsSimple& 
             MGlobal::displayInfo(MString("Centroid Velocity: ") + frameOffsets[v].x + frameOffsets[v].y + frameOffsets[v].z);
         }
     }
+    
+
+    // ==========================================================
+    // DEBUGGING: Tracking function calls and setting dummy data
+    // ==========================================================
+    
+    /*
+    // Tracking how many times this function has been called to debug 
+    // motion offset caching realted issues in SmearNode
+    static int functionInvocationCount = 0;
+    functionInvocationCount++;
+    MGlobal::displayInfo(MString("Function has been called ") + functionInvocationCount + " times.");
+
+    // Craeate dummy data 
+    motionOffsets.startFrame = 0; 
+    motionOffsets.endFrame = 5; 
+    motionOffsets.motionOffsets.resize(2); // Create two frames of data
+    int vertexCount = 5; 
+    // Fill each frame with dummy motion offsets
+    for (int i = 0; i < motionOffsets.endFrame; ++i) {
+        motionOffsets.motionOffsets[i].setLength(vertexCount); // Assume 3 vertices for testing
+        for (int j = 0; j < vertexCount; ++j) {
+            motionOffsets.motionOffsets[i][j] = MVector(i * 5, i * 5, i * 5);
+        }
+    }
+    */
 
     return MS::kSuccess;
 }

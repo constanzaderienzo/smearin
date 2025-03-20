@@ -13,11 +13,11 @@
 #include <maya/MFnNumericAttribute.h>
 #include "smear.h" // Include the Smear header
 
-#define McheckErr(stat,msg)			\
-	if ( MS::kSuccess != stat ) {	\
-		cerr << msg;				\
-		return MS::kFailure;		\
-	}
+#define McheckErr(stat, msg)        \
+    if (MS::kSuccess != stat) {     \
+        MGlobal::displayError(msg); \
+        return MS::kFailure;        \
+    }
 
 MTypeId SmearNode::id(0x98520); // Random id 
 MObject SmearNode::time;
@@ -108,23 +108,26 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kFailure;
     }
 
-    // +++ Compute motion offsets using Smear functions +++
-    MotionOffsetsSimple motionOffsets;
-    status = Smear::computeMotionOffsetsSimple(inputObj, motionOffsets);
-    McheckErr(status, "Failed to compute motion offsets");
-
+    // +++ Compute motion offsets using Smear functions +++i
+    // Only compute motion offsets one time
+    if (!motionOffsetsBaked) {
+        status = Smear::computeMotionOffsetsSimple(inputObj, motionOffsetsSimple);
+        McheckErr(status, "Failed to compute motion offsets");
+        motionOffsetsBaked = true; 
+    }
+   
     // +++ Map motion offsets to colors +++
     MColorArray colors(numVertices);
     MIntArray vtxIndices(numVertices);
 
     // Find the motion offset data for the current frame
-    int frameIndex = static_cast<int>(frame) - static_cast<int>(motionOffsets.startFrame);
-    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
+    int frameIndex = static_cast<int>(frame) - static_cast<int>(motionOffsetsSimple.startFrame);
+    if (frameIndex < 0 || frameIndex >= motionOffsetsSimple.motionOffsets.size()) {
         MGlobal::displayError("Current frame is out of range of the motion offset data");
         return MS::kFailure;
     }
 
-    const MVectorArray& currentFrameOffsets = motionOffsets.motionOffsets[frameIndex];
+    const MVectorArray& currentFrameOffsets = motionOffsetsSimple.motionOffsets[frameIndex];
 
     for (int i = 0; i < numVertices; ++i) {
         MVector offset = currentFrameOffsets[i];

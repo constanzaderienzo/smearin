@@ -20,13 +20,13 @@ class Smear
 private:
     // If this function does not compile, make sure to add "OpenMayaAnim.lib" in 
     // Project Properties -> Configuration Properties -> Linker -> Input -> Additional Dependencies
-    static MStatus computeWorldTransformPerFrame(const MObject& object, std::vector<MMatrix>& transformationMatrices);
-    static MStatus calculateCentroidOffsetFromPivot(MObject& object, MVector& centroidOffset);
-    static MStatus computeCentroidTrajectory(MObject& object, std::vector<MVectorArray>& centroidPositions);
-    static MStatus computeCentroidVelocity(MObject& object, std::vector<MVector>& centroidVelocities, double& startFrame, double& endFrame);
-
+    static MStatus computeWorldTransformPerFrame(const MDagPath& transformPath, std::vector<MMatrix>& transformationMatrices);
+    static MStatus calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const MDagPath& transformPath, MVector& centroidOffset);
+    static MStatus computeCentroidTrajectory(const MDagPath& shapePath, const MDagPath& transformPath, std::vector<MVectorArray>& centroidPositions);
+    static MStatus computeCentroidVelocity(const MDagPath& shapePath, const MDagPath& transformPath, std::vector<MVector>& centroidVelocities, double& startFrame, double& endFrame);
+    static MStatus getTransformFromMesh(const MDagPath& shapePath, MDagPath& transformPath); 
 public:
-    static MStatus computeMotionOffsetsSimple(MObject& object, MotionOffsetsSimple& motionOffsets); 
-    static MStatus extractAnimationFrameRange(const MObject& obj, double& startFrame, double& endFrame);
+    static MStatus computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagPath& transformPath, MotionOffsetsSimple& motionOffsets);
+    static MStatus extractAnimationFrameRange(const MDagPath& transformPath, double& startFrame, double& endFrame);
 
 };

@@ -5,12 +5,14 @@
 #include <maya/MStatus.h>
 #include <maya/MGlobal.h>
 #include <maya/MFnMeshData.h>
+#include <maya/MFnTransform.h>
 #include <maya/MPointArray.h>
 #include <maya/MVectorArray.h>
 #include <maya/MItMeshVertex.h>
 #include <maya/MAnimControl.h>
 #include <maya/MTime.h>
 #include <maya/MFnNumericAttribute.h>
+#include <maya/MDagPath.h>
 #include "smear.h" // Include the Smear header
 
 #define McheckErr(stat, msg)        \
@@ -23,6 +25,30 @@ MTypeId SmearNode::id(0x98520); // Random id
 MObject SmearNode::time;
 MObject SmearNode::inputMesh;
 MObject SmearNode::outputMesh;
+
+MStatus SmearNode::getDagPathsFromInputMesh(MObject inputMesh, MDagPath & transformPath, MDagPath & shapePath) const
+{
+    MStatus status; 
+    MObject shapeObj;
+    if (inputMesh.hasFn(MFn::kTransform)) {
+        MDagPath dagPath;
+        status = MDagPath::getAPathTo(inputMesh, dagPath);
+        if (!status) {
+            MGlobal::displayError("Failed to get MDagPath for the transform node.");
+            return MS::kFailure;
+        }
+        transformPath = dagPath; 
+
+        // Extend the path to the shape node
+        status = dagPath.extendToShape();
+        if (!status) {
+            MGlobal::displayError("Failed to extend to shape node.");
+            return MS::kFailure;
+        }
+        shapePath = dagPath; 
+    }
+    return MStatus::kSuccess;
+}
 
 SmearNode::SmearNode():
     motionOffsetsSimple(), motionOffsetsBaked(false) 
@@ -98,7 +124,12 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     MObject copiedMesh = inputFn.copy(inputObj, newOutput, &status);
     McheckErr(status, "Mesh copy failed");
 
-    // Apply vertex colors
+    // Get DAG paths for mesh and transform
+    MDagPath shapePath, transformPath;
+    status = getDagPathsFromInputMesh(inputObj, transformPath, shapePath);
+    McheckErr(status, "Failed to tranform path and shape path from input object");
+
+    // Cast copied Mesh into MfnMesh
     MFnMesh outputFn(copiedMesh, &status);
     McheckErr(status, "Output mesh init failed");
 
@@ -108,14 +139,14 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kFailure;
     }
 
-    // +++ Compute motion offsets using Smear functions +++i
-    // Only compute motion offsets one time
+    // +++ Compute motion offsets using Smear functions +++
     if (!motionOffsetsBaked) {
-        status = Smear::computeMotionOffsetsSimple(inputObj, motionOffsetsSimple);
+        status = Smear::computeMotionOffsetsSimple(shapePath, transformPath, motionOffsetsSimple);
         McheckErr(status, "Failed to compute motion offsets");
-        motionOffsetsBaked = true; 
+        MGlobal::displayInfo("startFrame: " + MString() + motionOffsetsSimple.startFrame + " endFrame: " + motionOffsetsSimple.endFrame);
+        motionOffsetsBaked = true;
     }
-   
+
     // +++ Map motion offsets to colors +++
     MColorArray colors(numVertices);
     MIntArray vtxIndices(numVertices);

@@ -111,7 +111,7 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
         double rotation[3] = {
             rotatePlug.child(0).asDouble(context),
             rotatePlug.child(1).asDouble(context),
-            rotatePlug.child(2).asDouble(context)};
+            rotatePlug.child(2).asDouble(context) };
 
         double scale[3] = {
             scalePlug.child(0).asDouble(context),
@@ -128,11 +128,24 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
         transformationMatrices[frame] = matrix;
 
         // Debug print
-        MString msg = MString() + "Frame " + frame + ": Translation = (" +
+        // Debug print
+        MString msg = MString() + "Frame " + frame + ":\n"
+        + "  Translation = (" +
             translation.x + ", " +
             translation.y + ", " +
-            translation.z + ")";
+            translation.z + ")\n"
+
+        + "  Rotation (XYZ degrees) = (" +
+            rotation[0] + ", " +
+            rotation[1] + ", " +
+            rotation[2] + ")\n"
+
+        + "  Scale = (" +
+            scale[0] + ", " +
+            scale[1] + ", " +
+            scale[2] + ")";
         MGlobal::displayInfo(msg);
+
     }
 
     return MS::kSuccess;

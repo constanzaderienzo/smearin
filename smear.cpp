@@ -295,7 +295,7 @@ MStatus Smear::computeCentroidTrajectory(const MDagPath& meshPath, const MDagPat
     status = computeWorldTransformPerFrame(transformPath, startFrame, endFrame, transformationMatrices);
     McheckErr(status, "Failed to compute world transforms.");
 
-    //MGlobal::displayInfo("Smear::computeCentroidTrajectory - centroid positions");
+    // MGlobal::displayInfo("Smear::computeCentroidTrajectory - centroid positions");
     for (int frame = 0; frame < numFrames; ++frame) {
         // Find how the position of the centroid changes based on the pivot's transformations (how it moves, rotates, scales) 
         // by multiplying the transform to centroid offset 
@@ -334,9 +334,6 @@ MStatus Smear::computeCentroidVelocity(const MDagPath& meshPath, const MDagPath&
     status = computeCentroidTrajectory(meshPath, transformPath, centroidPositions);
     McheckErr(status, "Failed to compute centroid trajectory.");
 
-
-
-    /*
     // Check if there are at least two frames
     int numFrames = static_cast<int>(centroidPositions.size());
     if (numFrames < 2) {
@@ -346,12 +343,23 @@ MStatus Smear::computeCentroidVelocity(const MDagPath& meshPath, const MDagPath&
 
     // Use the centroid positions to compute centroid velocity at each frame
     centroidVelocities.resize(numFrames - 1);
+    //MGlobal::displayInfo("Smear::computeCentroidVelocity - centroid positions");
     for (int frame = 0; frame < numFrames - 1; ++frame) {
-        MVector centroidCurrent = centroidPositions[frame][0];
-        MVector centroidNext = centroidPositions[frame + 1][0];
+        MVector centroidCurrent = centroidPositions[frame];
+        MVector centroidNext = centroidPositions[frame + 1];
         centroidVelocities[frame] = centroidNext - centroidCurrent;
+
+        // Print for debugging
+        /*
+        MString debugMsg = "(" + MString() +
+            centroidVelocities[frame].x + ", " +
+            centroidVelocities[frame].y + ", " +
+            centroidVelocities[frame].z + ")";
+        MGlobal::displayInfo(debugMsg);
+        */
     }
-    */
+
+
 
     return MS::kSuccess;
 }

@@ -185,7 +185,7 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
         transformationMatrices[frame] = matrix;
 
         // Debug print
-        // Debug print
+        /*
         MString msg = MString() + "Frame " + frame + ":\n"
         + "  Translation = (" +
             translation.x + ", " +
@@ -202,10 +202,11 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
             scale[1] + ", " +
             scale[2] + ")";
         MGlobal::displayInfo(msg);
-
-        if (!compareTransformComponents(rotOrder, transformationMatrices[frame], translation, rotation, scale)) {
+        */
+        if (!compareTransformComponents(rotOrder, transformationMatrices[frame], translation, rotation, scale, 1e-4, false)) {
             MGlobal::displayError("Transformation matrix does not match expected translation, rotation, or scale"); 
         }
+        
     }
 
     return MS::kSuccess;
@@ -294,18 +295,23 @@ MStatus Smear::computeCentroidTrajectory(const MDagPath& meshPath, const MDagPat
     status = computeWorldTransformPerFrame(transformPath, startFrame, endFrame, transformationMatrices);
     McheckErr(status, "Failed to compute world transforms.");
 
+    //MGlobal::displayInfo("Smear::computeCentroidTrajectory - centroid positions");
     for (int frame = 0; frame < numFrames; ++frame) {
         // Find how the position of the centroid changes based on the pivot's transformations (how it moves, rotates, scales) 
         // by multiplying the transform to centroid offset 
         MPoint transformedOffset = MPoint(centroidOffset) * transformationMatrices[frame];
         centroidPositions[frame] = MVector(transformedOffset);
 
+
+
         // Print for debugging
+        /*
         MString debugMsg = "(" + MString() + 
             centroidPositions[frame].x + ", " +
             centroidPositions[frame].y + ", " +
             centroidPositions[frame].z + ")";
         MGlobal::displayInfo(debugMsg);
+        */
     }
 
     return MS::kSuccess;
@@ -323,12 +329,12 @@ MStatus Smear::computeCentroidVelocity(const MDagPath& meshPath, const MDagPath&
         return MS::kFailure; // Not a transform node.
     }
 
-    
-
     // Compute centroid positions through each frame
     std::vector<MVector> centroidPositions;
     status = computeCentroidTrajectory(meshPath, transformPath, centroidPositions);
     McheckErr(status, "Failed to compute centroid trajectory.");
+
+
 
     /*
     // Check if there are at least two frames

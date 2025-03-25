@@ -367,7 +367,16 @@ MStatus Smear::computeCentroidVelocity(const MDagPath& meshPath, const MDagPath&
 }
 MStatus Smear::computeSignedDistanceToPlane(const MPoint& point, const MPoint& pointOnPlane, const MVector& planeNormal, double& signedDist)
 {
-    return MStatus();
+    MStatus status;
+
+    MVector diff = point - pointOnPlane;
+
+    // Make sure the normal is normalized
+    MVector norm = planeNormal.normal();
+
+    signedDist = diff * norm;  // Dot product
+
+    return MS::kSuccess;
 }
 
 MStatus Smear::computeMotionOffsets(const MPointArray& vertexPositions, const MPoint& centroid, const MVector& centroidVelocity, MDoubleArray& motionOffsets)
@@ -387,7 +396,7 @@ MStatus Smear::computeMotionOffsets(const MPointArray& vertexPositions, const MP
         double& motionOffset = motionOffsets[i];
         const MPoint& vertexPosition = vertexPositions[i];
         // Motion offset for simple object is just the signed dist to plane
-        status = computeSignedDistanceToPlane(vertexPosition, centroid, centroidVelocity, motionOffset);
+        status = computeSignedDistanceToPlane(vertexPosition, centroid, centroidVelocity.normal(), motionOffset);
 
         // Check the magnitude of motion offset and record if it's the largest so far 
         maxMotionOffsetMag = std::max(maxMotionOffsetMag, motionOffset);
@@ -395,7 +404,7 @@ MStatus Smear::computeMotionOffsets(const MPointArray& vertexPositions, const MP
 
     // Normalize motion offsets 
     for (int i = 0; i < vertCount; ++i) {
-
+        motionOffsets[i] /= maxMotionOffsetMag; 
     }
 }
 

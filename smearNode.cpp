@@ -174,9 +174,11 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
 
     // Find the motion offset data for the current frame
     int frameIndex = static_cast<int>(frame) - static_cast<int>(motionOffsetsSimple.startFrame);
+
+    // TODO: optimize this function so that this case is caught earlier
+    // There is nothing to smear in this frame
     if (frameIndex < 0 || frameIndex >= motionOffsetsSimple.motionOffsets.size()) {
-        MGlobal::displayError("Current frame is out of range of the motion offset data");
-        return MS::kFailure;
+        return MS::kSuccess; 
     }
 
     const MVectorArray& currentFrameOffsets = motionOffsetsSimple.motionOffsets[frameIndex];

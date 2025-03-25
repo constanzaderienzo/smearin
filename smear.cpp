@@ -385,7 +385,7 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     status = computeCentroidVelocity(shapePath, transformPath, centroidVelocities, motionOffsets.startFrame, motionOffsets.endFrame);
     McheckErr(status, "Failed to compute centroid velocity.");
 
-    /*
+    
     int numFrames = static_cast<int>(centroidVelocities.size());
     if (numFrames == 0) {
         MGlobal::displayError("No motion detected.");
@@ -393,46 +393,23 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     }
 
     motionOffsets.motionOffsets.resize(numFrames);
-    MObject shapeObj;
-    if (object.hasFn(MFn::kTransform)) {
-        MDagPath dagPath;
-        status = MDagPath::getAPathTo(object, dagPath);
-        if (!status) {
-            MGlobal::displayError("Failed to get MDagPath for the transform node.");
-            return MS::kFailure;
-        }
-
-        // Extend the path to the shape node
-        status = dagPath.extendToShape();
-        if (!status) {
-            MGlobal::displayError("Failed to extend to shape node.");
-            return MS::kFailure;
-        }
-
-        // Get the shape node
-        shapeObj = dagPath.node();
-        if (!shapeObj.hasFn(MFn::kMesh)) {
-            MGlobal::displayError("No mesh found under the transform.");
-            return MS::kFailure;
-        }
-    }
-
-    MFnMesh meshFn(shapeObj, &status);
+    MFnMesh meshFn(shapePath, &status);
     McheckErr(status, "computeMotionOffsetsSimple: Failed to create MFnMesh.");
     int numVertices = meshFn.numVertices();
 
     MGlobal::displayInfo(MString("Num Frames: ") + numFrames);
 
+    // For now, our motion offset is just the centroid velocity for debugging 
     for (int frame = 0; frame < numFrames; ++frame) {
-        MVectorArray& frameOffsets = motionOffsets.motionOffsets[frame];
-        frameOffsets.setLength(numVertices);
+        MVectorArray& currentFrameMotionOffsets = motionOffsets.motionOffsets[frame];
+        currentFrameMotionOffsets.setLength(numVertices);
 
         for (int v = 0; v < numVertices; ++v) {
-            frameOffsets[v] = centroidVelocities[frame];
-            MGlobal::displayInfo(MString("Centroid Velocity: ") + frameOffsets[v].x + frameOffsets[v].y + frameOffsets[v].z);
+            currentFrameMotionOffsets[v] = centroidVelocities[frame];
+            MGlobal::displayInfo(MString("Centroid Velocity: ") + currentFrameMotionOffsets[v].x + currentFrameMotionOffsets[v].y + currentFrameMotionOffsets[v].z);
         }
     }
-    */
+    
 
     // ==========================================================
     // DEBUGGING: Tracking function calls and setting dummy data

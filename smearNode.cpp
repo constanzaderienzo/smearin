@@ -176,6 +176,10 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     }
 
     MDoubleArray& currentFrameOffsets = motionOffsetsSimple.motionOffsets[frameIndex];
+    if (currentFrameOffsets.length() != numVertices) {
+        MGlobal::displayError("Offset/vertex count mismatch");
+        return MS::kFailure;
+    }
 
     // +++ Map motion offsets to colors +++
     MColorArray colors(numVertices);
@@ -212,23 +216,10 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
 }
 
 MColor SmearNode::computeColor(double offset) {
-    offset = std::max(-1.0, std::min(1.0, offset));
-
-    if (offset >= 0) {
-        return MColor(
-            static_cast<float>(offset),  // Red increases with +offset
-            0.2f,                       // Small green component for visibility
-            1.0f - static_cast<float>(offset), // Blue decreases
-            1.0f
-        );
+    if (offset > 0.01) {
+        return MColor(1.0f, 0.0f, 0.0f, 1.0f); // Pure red (forward)
     }
-    else {
-        offset = -offset; // Make positive
-        return MColor(
-            1.0f - static_cast<float>(offset), // Red decreases
-            0.2f,
-            static_cast<float>(offset),        // Blue increases
-            1.0f
-        );
+    else if (offset < -0.01) {
+        return MColor(0.0f, 0.0f, 1.0f, 1.0f); // Pure blue (backward)
     }
 }

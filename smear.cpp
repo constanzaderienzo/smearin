@@ -319,22 +319,8 @@ MStatus Smear::computeCentroidTrajectory(const MDagPath& meshPath, const MDagPat
     return MS::kSuccess;
 }
 
-MStatus Smear::computeCentroidVelocity(const MDagPath& meshPath, const MDagPath& transformPath, std::vector<MVector>& centroidVelocities, double& startFrame, double& endFrame) {
+MStatus Smear::computeCentroidVelocity(const std::vector<MVector>& centroidPositions, std::vector<MVector>& centroidVelocities, double& startFrame, double& endFrame) {
     MStatus status;
-    // Check if the provided path point to correct node types.
-    if (!meshPath.hasFn(MFn::kMesh)) {
-        MGlobal::displayError("meshPath does not point to a mesh node.");
-        return MS::kFailure; // Not a mesh node.
-    }
-    else if (!transformPath.hasFn(MFn::kTransform)) {
-        MGlobal::displayError("tranformPath does not point to a transform node.");
-        return MS::kFailure; // Not a transform node.
-    }
-
-    // Compute centroid positions through each frame
-    std::vector<MVector> centroidPositions;
-    status = computeCentroidTrajectory(meshPath, transformPath, centroidPositions);
-    McheckErr(status, "Failed to compute centroid trajectory.");
 
     // Check if there are at least two frames
     int numFrames = static_cast<int>(centroidPositions.size());
@@ -361,8 +347,6 @@ MStatus Smear::computeCentroidVelocity(const MDagPath& meshPath, const MDagPath&
         */
     }
 
-
-
     return MS::kSuccess;
 }
 MStatus Smear::computeSignedDistanceToPlane(const MPoint& point, const MPoint& pointOnPlane, const MVector& planeNormal, double& signedDist)
@@ -379,7 +363,7 @@ MStatus Smear::computeSignedDistanceToPlane(const MPoint& point, const MPoint& p
     return MS::kSuccess;
 }
 
-MStatus Smear::computeMotionOffsets(const MPointArray& vertexPositions, const MPoint& centroid, const MVector& centroidVelocity, MDoubleArray& motionOffsets)
+MStatus Smear::calculatePerFrameMotionOffsets(const MPointArray& vertexPositions, const MPoint& centroid, const MVector& centroidVelocity, MDoubleArray& motionOffsets)
 {
     MStatus status;
     // Store the magnitude of the largest motion offset
@@ -397,16 +381,18 @@ MStatus Smear::computeMotionOffsets(const MPointArray& vertexPositions, const MP
         const MPoint& vertexPosition = vertexPositions[i];
         // Motion offset for simple object is just the signed dist to plane
         status = computeSignedDistanceToPlane(vertexPosition, centroid, centroidVelocity.normal(), motionOffset);
-        MGlobal::displayInfo(MString("Motion Offset: ") + motionOffset);
-
+        
         // Check the magnitude of motion offset and record if it's the largest so far 
-        maxMotionOffsetMag = std::max(maxMotionOffsetMag, motionOffset);
+        maxMotionOffsetMag = std::max(maxMotionOffsetMag, std::abs(motionOffset));
     }
 
     // Normalize motion offsets 
     for (int i = 0; i < vertCount; ++i) {
         motionOffsets[i] /= maxMotionOffsetMag; 
+        MGlobal::displayInfo(MString("Motion Offset: ") + motionOffsets[i]);
     }
+    MGlobal::displayInfo("Smear::calculatePerFrameMotionOffsets - completed!");
+    return MS::kSuccess; 
 }
 
 
@@ -425,10 +411,15 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
 
     MGlobal::displayInfo("Both shapePath and transformPath point to their respective nodes!");
 
+    // Calculate the centroid's positions over time 
+    std::vector<MVector> centroidPositions; 
+    status = computeCentroidTrajectory(shapePath, transformPath, centroidPositions);
+
+    
     // Just passing along centroid velocity for now 
     // No real motion offset calculation yet 
     std::vector<MVector> centroidVelocities;
-    status = computeCentroidVelocity(shapePath, transformPath, centroidVelocities, motionOffsets.startFrame, motionOffsets.endFrame);
+    status = computeCentroidVelocity(centroidPositions, centroidVelocities, motionOffsets.startFrame, motionOffsets.endFrame);
     McheckErr(status, "Failed to compute centroid velocity.");
 
     
@@ -444,15 +435,19 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     int numVertices = meshFn.numVertices();
 
     MGlobal::displayInfo(MString("Num Frames: ") + numFrames);
+    
+    MPointArray vertices;
+    status = meshFn.getPoints(vertices);
 
     // For now, our motion offset is just the centroid velocity for debugging 
+    MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - centoidPositions.length()" + MString() + centroidPositions.size());
+    MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - centroidVelocities.length()" + MString() + centroidVelocities.size());
+    MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - motionOffsets.motionOffsets.length()" + MString() + motionOffsets.motionOffsets.size());
     for (int frame = 0; frame < numFrames; ++frame) {
+        MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Current frame:" + MString() + frame);
         MDoubleArray& currentFrameMotionOffsets = motionOffsets.motionOffsets[frame];
-        currentFrameMotionOffsets.setLength(numVertices);
-
-        for (int v = 0; v < numVertices; ++v) {
-            MGlobal::displayInfo(MString("Centroid Velocity: ") + centroidVelocities[v].x + centroidVelocities[v].y + centroidVelocities[v].z);
-        }
+        status = calculatePerFrameMotionOffsets(vertices, centroidPositions[frame], centroidVelocities[frame], currentFrameMotionOffsets);
+        McheckErr(status, "Faield to calculate per frame motion offset for frame " + MString() + frame); 
     }
     
 

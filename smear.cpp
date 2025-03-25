@@ -6,6 +6,7 @@
 #include <maya/MAnimControl.h>
 #include <maya/MGlobal.h>
 #include <maya/MFnTransform.h>
+#include <maya/MTransformationMatrix.h>
 #include <maya/MItMeshVertex.h>
 #include <maya/MMatrix.h>
 #include <maya/MDagPath.h>
@@ -75,42 +76,68 @@ MStatus Smear::extractAnimationFrameRange(const MDagPath & transformPath, double
     return MS::kSuccess;
 }
 
-MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath, const double startFrame, const double endFrame, std::vector<MMatrix>& transformationMatrices) {
+MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
+    const double startFrame,
+    const double endFrame,
+    std::vector<MMatrix>& transformationMatrices) {
     MStatus status;
-    // Check if the provided path point to correct node types.
+
     if (!transformPath.hasFn(MFn::kTransform)) {
-        MGlobal::displayError("Smear::computeWorldTransformPerFrame - tranformPath does not point to a transform node.");
-        return MS::kFailure; // Not a transform node.
+        MGlobal::displayError("Smear::computeWorldTransformPerFrame - transformPath is not a transform node.");
+        return MS::kFailure;
     }
-    MGlobal::displayInfo("Smear::computeWorldTransformPerFrame - startframe: " + MString() + startFrame + " endFrame: " + endFrame);
+
+    MFnDependencyNode depNode(transformPath.node(), &status);
+    McheckErr(status, "Failed to create MFnDependencyNode");
 
     auto numFrames = static_cast<int>(endFrame - startFrame + 1);
     transformationMatrices.resize(numFrames);
 
-    McheckErr(status, "Smear::computeWorldTransformPerFrame - Failed to create MFnTransform.");
-    MGlobal::displayInfo("Smear::computeWorldTransformPerFrame - transform positions");
     for (int frame = 0; frame < numFrames; ++frame) {
         MTime currentTime(startFrame + frame, MTime::uiUnit());
-        MAnimControl::setCurrentTime(currentTime);
+        MDGContext context(currentTime);
 
-        // THIS evaluates at current time!
-        transformationMatrices[frame] = transformPath.inclusiveMatrix();
+        // Get plugs for transform attributes
+        MPlug translatePlug = depNode.findPlug("translate", true);
+        MPlug rotatePlug = depNode.findPlug("rotate", true);
+        MPlug scalePlug = depNode.findPlug("scale", true);
 
-        // Optional: debug print
-        MPoint origin(0, 0, 0, 1);
-        MVector translation = origin * transformationMatrices[frame];
+        // Evaluate plugs at this time
+        MVector translation(
+            translatePlug.child(0).asDouble(context),
+            translatePlug.child(1).asDouble(context),
+            translatePlug.child(2).asDouble(context));
 
-        MString debugMsg = ": (" + MString() + 
+        double rotation[3] = {
+            rotatePlug.child(0).asDouble(context),
+            rotatePlug.child(1).asDouble(context),
+            rotatePlug.child(2).asDouble(context)};
+
+        double scale[3] = {
+            scalePlug.child(0).asDouble(context),
+            scalePlug.child(1).asDouble(context),
+            scalePlug.child(2).asDouble(context)};
+
+        // Build transform matrix manually
+        MTransformationMatrix xform;
+        xform.setTranslation(translation, MSpace::kTransform);
+        xform.setRotation(rotation, MTransformationMatrix::kXYZ);
+        xform.setScale(scale, MSpace::kTransform);
+
+        MMatrix matrix = xform.asMatrix();
+        transformationMatrices[frame] = matrix;
+
+        // Debug print
+        MString msg = MString() + "Frame " + frame + ": Translation = (" +
             translation.x + ", " +
             translation.y + ", " +
             translation.z + ")";
-        MGlobal::displayInfo(debugMsg);
+        MGlobal::displayInfo(msg);
     }
 
-
-    
     return MS::kSuccess;
 }
+
 
 MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const MDagPath& transformPath, MVector& centroidOffset) {
     MStatus status;

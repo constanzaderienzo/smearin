@@ -15,6 +15,8 @@
 #include <maya/MFnNumericAttribute.h>
 #include <maya/MDagPath.h>
 #include "smear.h" // Include the Smear header
+// Replace the vertex loop with parallel processing:
+//#include <tbb/parallel_for.h>
 
 #define McheckErr(stat, msg)        \
     if (MS::kSuccess != stat) {     \
@@ -119,12 +121,7 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     double frame = currentTime.as(MTime::kFilm);  // Get time in frames
 
     MDataHandle inputHandle = data.inputValue(inputMesh, &status);
-    if (!status) {
-        MGlobal::displayError("Failed to get input mesh handle");
-        return status;
-    }
-
-    // Validate mesh type
+    McheckErr(status, "Failed to get input mesh");
     MObject inputObj = inputHandle.asMesh();
 
     if (inputObj.isNull() || !inputObj.hasFn(MFn::kMesh)) {
@@ -169,10 +166,6 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         motionOffsetsBaked = true;
     }
 
-    // +++ Map motion offsets to colors +++
-    MColorArray colors(numVertices);
-    MIntArray vtxIndices(numVertices);
-
     // Find the motion offset data for the current frame
     int frameIndex = static_cast<int>(frame) - static_cast<int>(motionOffsetsSimple.startFrame);
 
@@ -182,17 +175,25 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kSuccess; 
     }
 
-    const MDoubleArray& currentFrameOffsets = motionOffsetsSimple.motionOffsets[frameIndex];
+    MDoubleArray& currentFrameOffsets = motionOffsetsSimple.motionOffsets[frameIndex];
+
+    // +++ Map motion offsets to colors +++
+    MColorArray colors(numVertices);
+    MIntArray vtxIndices(numVertices);
 
     for (int i = 0; i < numVertices; ++i) {
         double offset = currentFrameOffsets[i];
-        MColor color = computeColor(offset);
-        colors.set(color, i);
+        colors[i] = computeColor(offset);
         vtxIndices[i] = i;  
     }
+    //tbb::parallel_for(0, numVertices, [&](int i) {
+    //    colors[i] = computeColor(currentFrameOffsets[i]);
+    //    vtxIndices[i] = i;
+    //    });
 
     // Create/update color set
-    MString colorSet("smearSet");
+    const MString colorSet("smearSet");
+
     outputFn.createColorSetWithName(colorSet);
     outputFn.setCurrentColorSetName(colorSet);
 
@@ -203,18 +204,31 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     // Force viewport update
     outputFn.updateSurface();
 
-    // Assign output
-    MDataHandle outputHandle = data.outputValue(outputMesh);
-    outputHandle.set(newOutput);
+    // Set output
+    data.outputValue(outputMesh).set(newOutput);
     data.setClean(plug);
 
     return MS::kSuccess;
 }
 
 MColor SmearNode::computeColor(double offset) {
-    // Map offset direction to color
-    float r = 0.5f + 0.5f * offset;
-    float g = 0.5f + 0.5f * offset;
-    float b = 0.5f + 0.5f * offset;
-    return MColor(r, g, b, 1.0f);
+    offset = std::max(-1.0, std::min(1.0, offset));
+
+    if (offset >= 0) {
+        return MColor(
+            static_cast<float>(offset),  // Red increases with +offset
+            0.2f,                       // Small green component for visibility
+            1.0f - static_cast<float>(offset), // Blue decreases
+            1.0f
+        );
+    }
+    else {
+        offset = -offset; // Make positive
+        return MColor(
+            1.0f - static_cast<float>(offset), // Red decreases
+            0.2f,
+            static_cast<float>(offset),        // Blue increases
+            1.0f
+        );
+    }
 }

@@ -397,6 +397,7 @@ MStatus Smear::computeMotionOffsets(const MPointArray& vertexPositions, const MP
         const MPoint& vertexPosition = vertexPositions[i];
         // Motion offset for simple object is just the signed dist to plane
         status = computeSignedDistanceToPlane(vertexPosition, centroid, centroidVelocity.normal(), motionOffset);
+        MGlobal::displayInfo(MString("Motion Offset: ") + motionOffset);
 
         // Check the magnitude of motion offset and record if it's the largest so far 
         maxMotionOffsetMag = std::max(maxMotionOffsetMag, motionOffset);
@@ -407,7 +408,6 @@ MStatus Smear::computeMotionOffsets(const MPointArray& vertexPositions, const MP
         motionOffsets[i] /= maxMotionOffsetMag; 
     }
 }
-
 
 
 MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagPath& transformPath, MotionOffsetsSimple& motionOffsets) {

@@ -149,12 +149,13 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     MDagPath shapePath, transformPath;
     status = getDagPathsFromInputMesh(inputObj, inputPlug, transformPath, shapePath);
     McheckErr(status, "Failed to tranform path and shape path from input object");
-
+    
     // Cast copied Mesh into MfnMesh
     MFnMesh outputFn(copiedMesh, &status);
     McheckErr(status, "Output mesh init failed");
 
     const int numVertices = outputFn.numVertices();
+
     if (numVertices == 0) {
         MGlobal::displayError("Mesh has no vertices");
         return MS::kFailure;
@@ -181,10 +182,10 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kSuccess; 
     }
 
-    const MVectorArray& currentFrameOffsets = motionOffsetsSimple.motionOffsets[frameIndex];
+    const MDoubleArray& currentFrameOffsets = motionOffsetsSimple.motionOffsets[frameIndex];
 
     for (int i = 0; i < numVertices; ++i) {
-        MVector offset = currentFrameOffsets[i];
+        double offset = currentFrameOffsets[i];
         MColor color = computeColor(offset);
         colors.set(color, i);
         vtxIndices[i] = i;  
@@ -210,10 +211,10 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     return MS::kSuccess;
 }
 
-MColor SmearNode::computeColor(const MVector& offset) {
+MColor SmearNode::computeColor(double offset) {
     // Map offset direction to color
-    float r = 0.5f + 0.5f * offset.x;
-    float g = 0.5f + 0.5f * offset.y;
-    float b = 0.5f + 0.5f * offset.z;
+    float r = 0.5f + 0.5f * offset;
+    float g = 0.5f + 0.5f * offset;
+    float b = 0.5f + 0.5f * offset;
     return MColor(r, g, b, 1.0f);
 }

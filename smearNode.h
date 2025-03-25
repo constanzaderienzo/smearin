@@ -22,15 +22,16 @@ private:
 	MotionOffsetsSimple motionOffsetsSimple; 
 	// Tracks whether motion offsets are baked to avoid recomputation of offsets every frame
 	bool motionOffsetsBaked; 
-
 	MStatus getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug& inputMeshPlug, MDagPath& transformPath, MDagPath& shapePath) const;
+	
+
 public:
 	SmearNode();
 	~SmearNode() override;
 	static  void* creator();
 	static  MStatus initialize();
 	MStatus compute(const MPlug& plug, MDataBlock& data) override;
-	MColor computeColor(const MVector& offset);	
+	MColor computeColor(double offset);	
 
 	static MTypeId id;  // Unique node ID
 	static MObject time; 

@@ -3,10 +3,12 @@
 #include <maya/MFnAnimCurve.h>
 #include <maya/MPlug.h>
 #include <maya/MPlugArray.h>
+#include <maya/MPointArray.h> 
 #include <maya/MAnimControl.h>
 #include <maya/MGlobal.h>
 #include <maya/MFnTransform.h>
 #include <maya/MTransformationMatrix.h>
+#include <maya/MPointArray.h>
 #include <maya/MItMeshVertex.h>
 #include <maya/MMatrix.h>
 #include <maya/MDagPath.h>
@@ -363,6 +365,41 @@ MStatus Smear::computeCentroidVelocity(const MDagPath& meshPath, const MDagPath&
 
     return MS::kSuccess;
 }
+MStatus Smear::computeSignedDistanceToPlane(const MPoint& point, const MPoint& pointOnPlane, const MVector& planeNormal, double& signedDist)
+{
+    return MStatus();
+}
+
+MStatus Smear::computeMotionOffsets(const MPointArray& vertexPositions, const MPoint& centroid, const MVector& centroidVelocity, MDoubleArray& motionOffsets)
+{
+    MStatus status;
+    // Store the magnitude of the largest motion offset
+    // to be used in normalizing motion offsets later
+    double maxMotionOffsetMag = DBL_MIN;
+
+    // Iterate and compute signed distance from the plane formed by the centroid and its velocity 
+    // for each vertex
+    int vertCount = vertexPositions.length();
+    status = motionOffsets.setLength(vertCount);
+    McheckErr(status, "SmearNode::computeMotionOffsets - invalid vertex count!");
+
+    for (int i = 0; i < vertCount; ++i) {
+        double& motionOffset = motionOffsets[i];
+        const MPoint& vertexPosition = vertexPositions[i];
+        // Motion offset for simple object is just the signed dist to plane
+        status = computeSignedDistanceToPlane(vertexPosition, centroid, centroidVelocity, motionOffset);
+
+        // Check the magnitude of motion offset and record if it's the largest so far 
+        maxMotionOffsetMag = std::max(maxMotionOffsetMag, motionOffset);
+    }
+
+    // Normalize motion offsets 
+    for (int i = 0; i < vertCount; ++i) {
+
+    }
+}
+
+
 
 MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagPath& transformPath, MotionOffsetsSimple& motionOffsets) {
     MStatus status;
@@ -401,12 +438,11 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
 
     // For now, our motion offset is just the centroid velocity for debugging 
     for (int frame = 0; frame < numFrames; ++frame) {
-        MVectorArray& currentFrameMotionOffsets = motionOffsets.motionOffsets[frame];
+        MDoubleArray& currentFrameMotionOffsets = motionOffsets.motionOffsets[frame];
         currentFrameMotionOffsets.setLength(numVertices);
 
         for (int v = 0; v < numVertices; ++v) {
-            currentFrameMotionOffsets[v] = centroidVelocities[frame];
-            MGlobal::displayInfo(MString("Centroid Velocity: ") + currentFrameMotionOffsets[v].x + currentFrameMotionOffsets[v].y + currentFrameMotionOffsets[v].z);
+            MGlobal::displayInfo(MString("Centroid Velocity: ") + centroidVelocities[v].x + centroidVelocities[v].y + centroidVelocities[v].z);
         }
     }
     

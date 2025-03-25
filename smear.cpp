@@ -76,6 +76,57 @@ MStatus Smear::extractAnimationFrameRange(const MDagPath & transformPath, double
     return MS::kSuccess;
 }
 
+bool compareTransformComponents(MTransformationMatrix::RotationOrder rotOrder, const MMatrix& matrix,
+    const MVector& expectedTranslation,
+    const double expectedRotation[3],  // in radians
+    const double expectedScale[3],
+    double tolerance = 1e-4,
+    bool verbose = true)
+{
+    MTransformationMatrix xform(matrix);
+
+    // Decompose
+    MVector actualTranslation = xform.getTranslation(MSpace::kTransform);
+
+    double actualRotation[3];
+    xform.getRotation(actualRotation, rotOrder);
+
+    double actualScale[3];
+    xform.getScale(actualScale, MSpace::kTransform);
+
+    // Floating-point comparison helper
+    auto closeEnough = [=](double a, double b) {
+        return std::abs(a - b) <= tolerance;
+        };
+
+    // Compare each component
+    bool translationMatch =
+        closeEnough(expectedTranslation.x, actualTranslation.x) &&
+        closeEnough(expectedTranslation.y, actualTranslation.y) &&
+        closeEnough(expectedTranslation.z, actualTranslation.z);
+
+    bool rotationMatch =
+        closeEnough(expectedRotation[0], actualRotation[0]) &&
+        closeEnough(expectedRotation[1], actualRotation[1]) &&
+        closeEnough(expectedRotation[2], actualRotation[2]);
+
+    bool scaleMatch =
+        closeEnough(expectedScale[0], actualScale[0]) &&
+        closeEnough(expectedScale[1], actualScale[1]) &&
+        closeEnough(expectedScale[2], actualScale[2]);
+
+    if (verbose) {
+        MString msg = "Transform Comparison Result:\n";
+        msg += "  Translation match: " + MString(translationMatch ? "PASS" : "FAIL") + "\n";
+        msg += "  Rotation match   : " + MString(rotationMatch ? "PASS" : "FAIL") + "\n";
+        msg += "  Scale match      : " + MString(scaleMatch ? "PASS" : "FAIL");
+        MGlobal::displayInfo(msg);
+    }
+
+    return translationMatch && rotationMatch && scaleMatch;
+}
+
+
 MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
     const double startFrame,
     const double endFrame,
@@ -92,6 +143,12 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
 
     auto numFrames = static_cast<int>(endFrame - startFrame + 1);
     transformationMatrices.resize(numFrames);
+
+    // Get the transform's rotation order
+    MFnTransform fnTransform(transformPath.node(), &status);
+    McheckErr(status, "Failed to get MFnTransform");
+
+    MTransformationMatrix::RotationOrder rotOrder = fnTransform.rotationOrder();
 
     for (int frame = 0; frame < numFrames; ++frame) {
         MTime currentTime(startFrame + frame, MTime::uiUnit());
@@ -121,7 +178,7 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
         // Build transform matrix manually
         MTransformationMatrix xform;
         xform.setTranslation(translation, MSpace::kTransform);
-        xform.setRotation(rotation, MTransformationMatrix::kXYZ);
+        xform.setRotation(rotation, rotOrder);
         xform.setScale(scale, MSpace::kTransform);
 
         MMatrix matrix = xform.asMatrix();
@@ -146,6 +203,9 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
             scale[2] + ")";
         MGlobal::displayInfo(msg);
 
+        if (!compareTransformComponents(rotOrder, transformationMatrices[frame], translation, rotation, scale)) {
+            MGlobal::displayError("Transformation matrix does not match expected translation, rotation, or scale"); 
+        }
     }
 
     return MS::kSuccess;

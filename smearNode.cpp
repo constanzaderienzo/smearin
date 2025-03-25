@@ -2,6 +2,7 @@
 #include <maya/MFnMesh.h>
 #include <maya/MFnUnitAttribute.h>
 #include <maya/MFnTypedAttribute.h>
+#include <maya/MFnDependencyNode.h>
 #include <maya/MStatus.h>
 #include <maya/MGlobal.h>
 #include <maya/MFnMeshData.h>
@@ -26,29 +27,45 @@ MObject SmearNode::time;
 MObject SmearNode::inputMesh;
 MObject SmearNode::outputMesh;
 
-MStatus SmearNode::getDagPathsFromInputMesh(MObject inputMesh, MDagPath & transformPath, MDagPath & shapePath) const
+MStatus SmearNode::getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug & inputMeshPlug, MDagPath & transformPath, MDagPath & shapePath) const
 {
-    MStatus status; 
-    MObject shapeObj;
-    if (inputMesh.hasFn(MFn::kTransform)) {
-        MDagPath dagPath;
-        status = MDagPath::getAPathTo(inputMesh, dagPath);
-        if (!status) {
-            MGlobal::displayError("Failed to get MDagPath for the transform node.");
-            return MS::kFailure;
-        }
-        transformPath = dagPath; 
+    MStatus status;
 
-        // Extend the path to the shape node
-        status = dagPath.extendToShape();
-        if (!status) {
-            MGlobal::displayError("Failed to extend to shape node.");
+    // Get the plug's source connection
+    MPlugArray connectedPlugs;
+    if (!inputMeshPlug.connectedTo(connectedPlugs, true, false) || connectedPlugs.length() == 0) {
+        MGlobal::displayError("inputMesh is not connected to any mesh.");
+        return MS::kFailure;
+    }
+
+    MPlug sourcePlug = connectedPlugs[0];
+    MObject sourceNode = sourcePlug.node();
+
+    // Get DAG path to that source node (should be a mesh shape)
+    MDagPath dagPath;
+    status = MDagPath::getAPathTo(sourceNode, dagPath);
+    if (!status) {
+        MGlobal::displayError("Failed to get MDagPath from connected source node.");
+        return status;
+    }
+
+    if (dagPath.node().hasFn(MFn::kMesh)) {
+        shapePath = dagPath;
+        status = dagPath.pop();
+        if (!status || !dagPath.node().hasFn(MFn::kTransform)) {
+            MGlobal::displayError("Failed to get transform from mesh shape.");
             return MS::kFailure;
         }
-        shapePath = dagPath; 
+        transformPath = dagPath;
     }
-    return MStatus::kSuccess;
+    else {
+        MGlobal::displayError("Source node is not a mesh shape.");
+        return MS::kFailure;
+    }
+    MGlobal::displayInfo("Retrieved dag paths from inputMesh!");
+    return MS::kSuccess;
 }
+
 
 SmearNode::SmearNode():
     motionOffsetsSimple(), motionOffsetsBaked(false) 
@@ -109,6 +126,7 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
 
     // Validate mesh type
     MObject inputObj = inputHandle.asMesh();
+
     if (inputObj.isNull() || !inputObj.hasFn(MFn::kMesh)) {
         MGlobal::displayError("Input is not a valid mesh");
         return MS::kFailure;
@@ -125,8 +143,11 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     McheckErr(status, "Mesh copy failed");
 
     // Get DAG paths for mesh and transform
+    MFnDependencyNode thisNodeFn(thisMObject());
+    MPlug inputPlug = thisNodeFn.findPlug(inputMesh, true);
+
     MDagPath shapePath, transformPath;
-    status = getDagPathsFromInputMesh(inputObj, transformPath, shapePath);
+    status = getDagPathsFromInputMesh(inputObj, inputPlug, transformPath, shapePath);
     McheckErr(status, "Failed to tranform path and shape path from input object");
 
     // Cast copied Mesh into MfnMesh

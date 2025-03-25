@@ -304,6 +304,8 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
         return MS::kFailure; // Not a transform node.
     }
 
+    MGlobal::displayInfo("Both shapePath and transformPath point to their respective nodes!");
+
     // Just passing along centroid velocity for now 
     // No real motion offset calculation yet 
     std::vector<MVector> centroidVelocities;

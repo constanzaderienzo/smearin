@@ -185,7 +185,7 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         MVector offset = currentFrameOffsets[i];
         MColor color = computeColor(offset);
         colors.set(color, i);
-        vtxIndices[i] = i;
+        vtxIndices[i] = i;  
     }
 
     // Create/update color set

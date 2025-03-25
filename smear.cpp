@@ -24,6 +24,7 @@ MStatus Smear::extractAnimationFrameRange(const MDagPath & transformPath, double
         MGlobal::displayError("Invalid transform node path");
         return MS::kFailure;
     }
+    MGlobal::displayInfo("extractAnimationFrameRange: valid transformPath pointing to transform node");
 
     MObject transformNode = transformPath.node();
     startFrame = DBL_MAX;
@@ -69,133 +70,83 @@ MStatus Smear::extractAnimationFrameRange(const MDagPath & transformPath, double
         return MS::kFailure;
     }
 
+    MGlobal::displayInfo("extractAnimationFrameRange::startFrame: " + MString() + startFrame + " endFrame: " + endFrame);
+
     return MS::kSuccess;
 }
 
-MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath, std::vector<MMatrix>& transformationMatrices) {
-    /*
+MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath, const double startFrame, const double endFrame, std::vector<MMatrix>& transformationMatrices) {
     MStatus status;
     // Check if the provided path point to correct node types.
     if (!transformPath.hasFn(MFn::kTransform)) {
-        MGlobal::displayError("tranformPath does not point to a transform node.");
+        MGlobal::displayError("Smear::computeWorldTransformPerFrame - tranformPath does not point to a transform node.");
         return MS::kFailure; // Not a transform node.
     }
+    MGlobal::displayInfo("Smear::computeWorldTransformPerFrame - startframe: " + MString() + startFrame + " endFrame: " + endFrame);
 
-    double startFrame, endFrame;
-    status = extractAnimationFrameRange(transformPath, startFrame, endFrame);
-    McheckErr(status, "Failed to extract animation frame range.");
-
-    int numFrames = static_cast<int>(endFrame - startFrame + 1);
+    auto numFrames = static_cast<int>(endFrame - startFrame + 1);
     transformationMatrices.resize(numFrames);
 
+    McheckErr(status, "Smear::computeWorldTransformPerFrame - Failed to create MFnTransform.");
+    MGlobal::displayInfo("Smear::computeWorldTransformPerFrame - transform positions");
     for (int frame = 0; frame < numFrames; ++frame) {
         MTime currentTime(startFrame + frame, MTime::uiUnit());
         MAnimControl::setCurrentTime(currentTime);
 
-        MFnTransform transformFn(object, &status);
-        McheckErr(status, "Failed to create MFnTransform.");
+        // THIS evaluates at current time!
+        transformationMatrices[frame] = transformPath.inclusiveMatrix();
 
-        transformationMatrices[frame] = transformFn.transformation().asMatrix();
+        // Optional: debug print
+        MPoint origin(0, 0, 0, 1);
+        MVector translation = origin * transformationMatrices[frame];
+
+        MString debugMsg = ": (" + MString() + 
+            translation.x + ", " +
+            translation.y + ", " +
+            translation.z + ")";
+        MGlobal::displayInfo(debugMsg);
     }
-    */
+
+
+    
     return MS::kSuccess;
 }
 
-MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& meshPath, const MDagPath& transformPath, MVector& centroidOffset) {
-    /*
+MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const MDagPath& transformPath, MVector& centroidOffset) {
     MStatus status;
 
     // Check if the provided path point to correct node types.
-    if (!meshPath.hasFn(MFn::kMesh)) {
-        MGlobal::displayError("meshPath does not point to a mesh node.");
+    if (!shapePath.hasFn(MFn::kMesh)) {
+        MGlobal::displayError("Smear::calculateCentroidOffsetFromPivot - meshPath does not point to a mesh node.");
         return MS::kFailure; // Not a mesh node.
     }
     else if (!transformPath.hasFn(MFn::kTransform)) {
-        MGlobal::displayError("tranformPath does not point to a transform node.");
+        MGlobal::displayError("Smear::calculateCentroidOffsetFromPivot - tranformPath does not point to a transform node.");
         return MS::kFailure; // Not a transform node.
     }
 
-    // Variables to store the transform and shape nodes
-    MObject transformObj = object;
-    MObject shapeObj;
-
-    // Check if the object is a transform node
-    if (object.hasFn(MFn::kTransform)) {
-        MDagPath dagPath;
-        status = MDagPath::getAPathTo(object, dagPath);
-        if (!status) {
-            MGlobal::displayError("Failed to get MDagPath for the transform node.");
-            return MS::kFailure;
-        }
-
-        // Extend the path to the shape node
-        status = dagPath.extendToShape();
-        if (!status) {
-            MGlobal::displayError("Failed to extend to shape node.");
-            return MS::kFailure;
-        }
-
-        // Get the shape node
-        shapeObj = dagPath.node();
-        if (!shapeObj.hasFn(MFn::kMesh)) {
-            MGlobal::displayError("No mesh found under the transform.");
-            return MS::kFailure;
-        }
-    }
-    else if (object.hasFn(MFn::kMesh)) {
-        // If the input is already a mesh, use it directly
-        shapeObj = object;
-
-        // Get the transform node from the shape node
-        MDagPath dagPath;
-        status = MDagPath::getAPathTo(shapeObj, dagPath);
-        if (!status) {
-            MGlobal::displayError("Failed to get MDagPath for the shape node.");
-            return MS::kFailure;
-        }
-
-        status = dagPath.pop(); // Move up to the transform node
-        if (!status) {
-            MGlobal::displayError("Failed to get transform node from shape node.");
-            return MS::kFailure;
-        }
-
-        transformObj = dagPath.node();
-    }
-    else {
-        MGlobal::displayError("Input object is neither a transform nor a mesh.");
-        return MS::kFailure;
-    }
-
     // Calculate the centroid using the shape node
-    MFnMesh meshFn(shapeObj, &status);
+    MFnMesh meshFn(shapePath.node(), &status);
     McheckErr(status, "Failed to create MFnMesh.");
 
     MVector sum(0.0, 0.0, 0.0);
     int numVertices = meshFn.numVertices();
-    MItMeshVertex vertexIt(shapeObj, &status);
+    MItMeshVertex vertexIt(shapePath.node(), &status);
     McheckErr(status, "Failed to create MItMeshVertex.");
 
+
     // Debug: Print vertex positions
-    MGlobal::displayInfo("Vertex positions:");
+    //MGlobal::displayInfo("Vertex positions:");
     for (; !vertexIt.isDone(); vertexIt.next()) {
         MPoint vertexPos = vertexIt.position(MSpace::kWorld);
-        MGlobal::displayInfo(MString("Vertex ") + vertexIt.index() + ": " + vertexPos.x + ", " + vertexPos.y + ", " + vertexPos.z);
+        //MGlobal::displayInfo(MString("Vertex ") + vertexIt.index() + ": " + vertexPos.x + ", " + vertexPos.y + ", " + vertexPos.z);
         sum += vertexPos;
     }
 
     MVector centroid = (numVertices > 0) ? sum / numVertices : MVector(0.0, 0.0, 0.0);
 
     // Debug: Print the centroid
-    MGlobal::displayInfo(MString("Centroid: ") + centroid.x + ", " + centroid.y + ", " + centroid.z);
-
-    // Get the pivot point of the transform node in world space
-    MDagPath transformPath;
-    status = MDagPath::getAPathTo(transformObj, transformPath);
-    if (!status) {
-        MGlobal::displayError("Failed to get MDagPath for the transform node.");
-        return MS::kFailure;
-    }
+    //MGlobal::displayInfo(MString("Centroid: ") + centroid.x + ", " + centroid.y + ", " + centroid.z);
 
     MPoint pivotPoint = transformPath.inclusiveMatrix()[3]; // Get the translation component of the matrix
     MVector pivot(pivotPoint.x, pivotPoint.y, pivotPoint.z);
@@ -205,11 +156,11 @@ MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& meshPath, const 
 
     // Calculate the centroid offset
     centroidOffset = centroid - pivot;
-    */
+
     return MS::kSuccess;
 }
 
-MStatus Smear::computeCentroidTrajectory(const MDagPath& meshPath, const MDagPath& transformPath, std::vector<MVectorArray>& centroidPositions) {
+MStatus Smear::computeCentroidTrajectory(const MDagPath& meshPath, const MDagPath& transformPath, std::vector<MVector>& centroidPositions) {
     MStatus status;
     // Check if the provided path point to correct node types.
     if (!meshPath.hasFn(MFn::kMesh)) {
@@ -222,11 +173,12 @@ MStatus Smear::computeCentroidTrajectory(const MDagPath& meshPath, const MDagPat
     }
 
     // Find the start and end frame to determine the range for which we compute trajectory 
-    double startFrame, endFrame;
+    double startFrame = -1;
+    double endFrame = -1;
     status = extractAnimationFrameRange(transformPath, startFrame, endFrame);
+    MGlobal::displayInfo("Smear::computeCentroidTrajectory - startframe: " + MString() + startFrame + " endFrame: " + endFrame);
     McheckErr(status, "Failed to extract animation frame range.");
 
-    /*
     int numFrames = static_cast<int>(endFrame - startFrame + 1);
     centroidPositions.resize(numFrames);
 
@@ -239,16 +191,23 @@ MStatus Smear::computeCentroidTrajectory(const MDagPath& meshPath, const MDagPat
 
     // Parse all the transformations from each frame to see how the pivot moves from animation 
     std::vector<MMatrix> transformationMatrices;
-    status = computeWorldTransformPerFrame(transformPath, transformationMatrices);
+    status = computeWorldTransformPerFrame(transformPath, startFrame, endFrame, transformationMatrices);
     McheckErr(status, "Failed to compute world transforms.");
 
     for (int frame = 0; frame < numFrames; ++frame) {
         // Find how the position of the centroid changes based on the pivot's transformations (how it moves, rotates, scales) 
         // by multiplying the transform to centroid offset 
         MPoint transformedOffset = MPoint(centroidOffset) * transformationMatrices[frame];
-        centroidPositions[frame].append(MVector(transformedOffset));
+        centroidPositions[frame] = MVector(transformedOffset);
+
+        // Print for debugging
+        MString debugMsg = "(" + MString() + 
+            centroidPositions[frame].x + ", " +
+            centroidPositions[frame].y + ", " +
+            centroidPositions[frame].z + ")";
+        MGlobal::displayInfo(debugMsg);
     }
-    */
+
     return MS::kSuccess;
 }
 
@@ -267,7 +226,7 @@ MStatus Smear::computeCentroidVelocity(const MDagPath& meshPath, const MDagPath&
     
 
     // Compute centroid positions through each frame
-    std::vector<MVectorArray> centroidPositions;
+    std::vector<MVector> centroidPositions;
     status = computeCentroidTrajectory(meshPath, transformPath, centroidPositions);
     McheckErr(status, "Failed to compute centroid trajectory.");
 

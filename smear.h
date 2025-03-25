@@ -20,9 +20,9 @@ class Smear
 private:
     // If this function does not compile, make sure to add "OpenMayaAnim.lib" in 
     // Project Properties -> Configuration Properties -> Linker -> Input -> Additional Dependencies
-    static MStatus computeWorldTransformPerFrame(const MDagPath& transformPath, std::vector<MMatrix>& transformationMatrices);
+    static MStatus computeWorldTransformPerFrame(const MDagPath& transformPath, const double startFrame, const double endFrame, std::vector<MMatrix>& transformationMatrices);
     static MStatus calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const MDagPath& transformPath, MVector& centroidOffset);
-    static MStatus computeCentroidTrajectory(const MDagPath& shapePath, const MDagPath& transformPath, std::vector<MVectorArray>& centroidPositions);
+    static MStatus computeCentroidTrajectory(const MDagPath& shapePath, const MDagPath& transformPath, std::vector<MVector>& centroidPositions);
     static MStatus computeCentroidVelocity(const MDagPath& shapePath, const MDagPath& transformPath, std::vector<MVector>& centroidVelocities, double& startFrame, double& endFrame);
     static MStatus getTransformFromMesh(const MDagPath& shapePath, MDagPath& transformPath); 
 public:

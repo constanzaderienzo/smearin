@@ -8,8 +8,8 @@
 #include <maya/MGlobal.h>
 #include <maya/MFnTransform.h>
 #include <maya/MTransformationMatrix.h>
-#include <maya/MPointArray.h>
 #include <maya/MItMeshVertex.h>
+#include <maya/MSelectionList.h>
 #include <maya/MMatrix.h>
 #include <maya/MDagPath.h>
 
@@ -187,24 +187,24 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
         transformationMatrices[frame] = matrix;
 
         // Debug print
-        /*
-        MString msg = MString() + "Frame " + frame + ":\n"
-        + "  Translation = (" +
-            translation.x + ", " +
-            translation.y + ", " +
-            translation.z + ")\n"
+        
+        //MString msg = MString() + "Frame " + frame + ":\n"
+        //+ "  Translation = (" +
+        //    translation.x + ", " +
+        //    translation.y + ", " +
+        //    translation.z + ")\n"
 
-        + "  Rotation (XYZ degrees) = (" +
-            rotation[0] + ", " +
-            rotation[1] + ", " +
-            rotation[2] + ")\n"
+        //+ "  Rotation (XYZ degrees) = (" +
+        //    rotation[0] + ", " +
+        //    rotation[1] + ", " +
+        //    rotation[2] + ")\n"
 
-        + "  Scale = (" +
-            scale[0] + ", " +
-            scale[1] + ", " +
-            scale[2] + ")";
-        MGlobal::displayInfo(msg);
-        */
+        //+ "  Scale = (" +
+        //    scale[0] + ", " +
+        //    scale[1] + ", " +
+        //    scale[2] + ")";
+        //MGlobal::displayInfo(msg);
+        
         if (!compareTransformComponents(rotOrder, transformationMatrices[frame], translation, rotation, scale, 1e-4, false)) {
             MGlobal::displayError("Transformation matrix does not match expected translation, rotation, or scale"); 
         }
@@ -259,6 +259,7 @@ MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const
 
     // Calculate the centroid offset
     centroidOffset = centroid - pivot;
+    MGlobal::displayInfo(MString("centroid point: ") + centroid.x + ", " + centroid.y + ", " + centroid.z);
 
     return MS::kSuccess;
 }
@@ -302,18 +303,19 @@ MStatus Smear::computeCentroidTrajectory(const MDagPath& meshPath, const MDagPat
         // Find how the position of the centroid changes based on the pivot's transformations (how it moves, rotates, scales) 
         // by multiplying the transform to centroid offset 
         MPoint transformedOffset = MPoint(centroidOffset) * transformationMatrices[frame];
+        
+        MGlobal::displayInfo("Transformed Offset (" + MString() +
+            transformedOffset.x + ", " +
+            transformedOffset.y + ", " +
+            transformedOffset.z + ")");
+        
         centroidPositions[frame] = MVector(transformedOffset);
 
-
-
-        // Print for debugging
-        /*
-        MString debugMsg = "(" + MString() + 
+        MGlobal::displayInfo("Centroid Position (" + MString() +
             centroidPositions[frame].x + ", " +
             centroidPositions[frame].y + ", " +
-            centroidPositions[frame].z + ")";
-        MGlobal::displayInfo(debugMsg);
-        */
+            centroidPositions[frame].z + ")");
+
     }
 
     return MS::kSuccess;
@@ -333,9 +335,7 @@ MStatus Smear::computeCentroidVelocity(const std::vector<MVector>& centroidPosit
     centroidVelocities.resize(numFrames - 1);
     //MGlobal::displayInfo("Smear::computeCentroidVelocity - centroid positions");
     for (int frame = 0; frame < numFrames - 1; ++frame) {
-        MVector centroidCurrent = centroidPositions[frame];
-        MVector centroidNext = centroidPositions[frame + 1];
-        centroidVelocities[frame] = centroidNext - centroidCurrent;
+        centroidVelocities[frame] = centroidPositions[frame + 1] - centroidPositions[frame];
 
         // Print for debugging
         /*
@@ -355,10 +355,7 @@ MStatus Smear::computeSignedDistanceToPlane(const MPoint& point, const MPoint& p
 
     MVector diff = point - pointOnPlane;
 
-    // Make sure the normal is normalized
-    MVector norm = planeNormal.normal();
-
-    signedDist = diff * norm;  // Dot product
+    signedDist = diff * planeNormal;  // Dot product
 
     return MS::kSuccess;
 }
@@ -376,6 +373,31 @@ MStatus Smear::calculatePerFrameMotionOffsets(const MPointArray& vertexPositions
     status = motionOffsets.setLength(vertCount);
     McheckErr(status, "SmearNode::computeMotionOffsets - invalid vertex count!");
 
+    MString debugMsg = "Velocity normal (" + MString() +
+        centroidVelocity.normal().x + ", " +
+        centroidVelocity.normal().y + ", " +
+        centroidVelocity.normal().z + ")";
+    MGlobal::displayInfo(debugMsg);
+
+    MString debugMsgC = "Centroid (" + MString() +
+        centroid.x + ", " +
+        centroid.y + ", " +
+        centroid.z + ")";
+    MGlobal::displayInfo(debugMsgC);
+
+    //MVector v_hat = centroidVelocity.normal();
+    //for (int i = 0; i < vertCount; ++i) {
+    //    MVector p_i = vertexPositions[i] - centroid;
+
+    //    MString debugMsgC = "p_i (" + MString() +
+    //        p_i.x + ", " +
+    //        p_i.y + ", " +
+    //        p_i.z + ")";
+    //    MGlobal::displayInfo(debugMsgC);
+    //    motionOffsets[i] = p_i.x * v_hat.x + p_i.y * v_hat.y + p_i.z * v_hat.z;
+    //    maxMotionOffsetMag = std::max(maxMotionOffsetMag, std::abs(motionOffsets[i]));
+    //}
+
     for (int i = 0; i < vertCount; ++i) {
         double& motionOffset = motionOffsets[i];
         const MPoint& vertexPosition = vertexPositions[i];
@@ -384,12 +406,15 @@ MStatus Smear::calculatePerFrameMotionOffsets(const MPointArray& vertexPositions
         
         // Check the magnitude of motion offset and record if it's the largest so far 
         maxMotionOffsetMag = std::max(maxMotionOffsetMag, std::abs(motionOffset));
+        MGlobal::displayInfo(MString("Motion Offset Pre: ") + motionOffsets[i]);
     }
 
     // Normalize motion offsets 
     for (int i = 0; i < vertCount; ++i) {
         motionOffsets[i] /= maxMotionOffsetMag; 
-        MGlobal::displayInfo(MString("Motion Offset: ") + motionOffsets[i]);
+        motionOffsets[i] = std::max(-1.0, std::min(1.0, motionOffsets[i]));
+        MGlobal::displayInfo(MString("Motion Offset Post: ") + motionOffsets[i]);
+
     }
     MGlobal::displayInfo("Smear::calculatePerFrameMotionOffsets - completed!");
     return MS::kSuccess; 
@@ -446,7 +471,7 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     for (int frame = 0; frame < numFrames; ++frame) {
         MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Current frame:" + MString() + frame);
         MDoubleArray& currentFrameMotionOffsets = motionOffsets.motionOffsets[frame];
-        status = calculatePerFrameMotionOffsets(vertices, centroidPositions[frame], centroidVelocities[frame], currentFrameMotionOffsets);
+        status = calculatePerFrameMotionOffsets(vertices, centroidPositions[frame], centroidVelocities[frame], motionOffsets.motionOffsets[frame]);
         McheckErr(status, "Faield to calculate per frame motion offset for frame " + MString() + frame); 
     }
     

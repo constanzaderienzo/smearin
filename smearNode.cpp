@@ -14,6 +14,7 @@
 #include <maya/MTime.h>
 #include <maya/MFnNumericAttribute.h>
 #include <maya/MDagPath.h>
+
 #include "smear.h" // Include the Smear header
 // Replace the vertex loop with parallel processing:
 //#include <tbb/parallel_for.h>
@@ -64,7 +65,6 @@ MStatus SmearNode::getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlu
         MGlobal::displayError("Source node is not a mesh shape.");
         return MS::kFailure;
     }
-    MGlobal::displayInfo("Retrieved dag paths from inputMesh!");
     return MS::kSuccess;
 }
 
@@ -221,5 +221,8 @@ MColor SmearNode::computeColor(double offset) {
     }
     else if (offset < -0.01) {
         return MColor(0.0f, 0.0f, 1.0f, 1.0f); // Pure blue (backward)
+    }
+    else {
+        return MColor(1.0f, 1.0f, 1.0f, 1.0f); // Pure white (backward)
     }
 }

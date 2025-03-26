@@ -3,7 +3,7 @@
 #include "smear.h"
 
 /*
-*	createNode SmearNode;
+	createNode SmearNode;
 	connectAttr "time1.outTime" "SmearNode1.time";
 	connectAttr "pCube1.outMesh" "SmearNode1.inputMesh";
 

@@ -7,7 +7,6 @@
 	connectAttr "time1.outTime" "SmearNode1.time";
 	connectAttr "pCube1.outMesh" "SmearNode1.inputMesh";
 
-	// Run this line after running above three lines to avoid errors 
 	if (`isConnected "polyCube1.output" "pCubeShape1.inMesh"`) {
 	disconnectAttr "polyCube1.output" "pCubeShape1.inMesh";
 }

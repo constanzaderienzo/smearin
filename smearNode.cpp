@@ -152,7 +152,6 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     McheckErr(status, "Output mesh init failed");
 
     const int numVertices = outputFn.numVertices();
-
     if (numVertices == 0) {
         MGlobal::displayError("Mesh has no vertices");
         return MS::kFailure;
@@ -162,17 +161,12 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     if (!motionOffsetsBaked) {
         status = Smear::computeMotionOffsetsSimple(shapePath, transformPath, motionOffsetsSimple);
         McheckErr(status, "Failed to compute motion offsets");
-        MGlobal::displayInfo("startFrame: " + MString() + motionOffsetsSimple.startFrame + " endFrame: " + motionOffsetsSimple.endFrame);
         motionOffsetsBaked = true;
     }
 
-    // Find the motion offset data for the current frame
     int frameIndex = static_cast<int>(frame) - static_cast<int>(motionOffsetsSimple.startFrame);
-
-    // TODO: optimize this function so that this case is caught earlier
-    // There is nothing to smear in this frame
     if (frameIndex < 0 || frameIndex >= motionOffsetsSimple.motionOffsets.size()) {
-        return MS::kSuccess; 
+        return MS::kSuccess;
     }
 
     MDoubleArray& currentFrameOffsets = motionOffsetsSimple.motionOffsets[frameIndex];
@@ -190,10 +184,6 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         colors[i] = computeColor(offset);
         vtxIndices[i] = i;  
     }
-    //tbb::parallel_for(0, numVertices, [&](int i) {
-    //    colors[i] = computeColor(currentFrameOffsets[i]);
-    //    vtxIndices[i] = i;
-    //    });
 
     // Create/update color set
     const MString colorSet("smearSet");

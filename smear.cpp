@@ -27,7 +27,6 @@ MStatus Smear::extractAnimationFrameRange(const MDagPath & transformPath, double
         MGlobal::displayError("Invalid transform node path");
         return MS::kFailure;
     }
-    MGlobal::displayInfo("extractAnimationFrameRange: valid transformPath pointing to transform node");
 
     MObject transformNode = transformPath.node();
     startFrame = DBL_MAX;
@@ -242,18 +241,13 @@ MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const
 
     MVector centroid = (numVertices > 0) ? sum / numVertices : MVector(0.0, 0.0, 0.0);
 
-    // Debug: Print the centroid
-    //MGlobal::displayInfo(MString("Centroid: ") + centroid.x + ", " + centroid.y + ", " + centroid.z);
-
     MPoint pivotPoint = transformPath.inclusiveMatrix()[3]; // Get the translation component of the matrix
     MVector pivot(pivotPoint.x, pivotPoint.y, pivotPoint.z);
 
     // Debug: Print the pivot point
-    MGlobal::displayInfo(MString("Pivot point: ") + pivot.x + ", " + pivot.y + ", " + pivot.z);
 
     // Calculate the centroid offset
     centroidOffset = centroid - pivot;
-    MGlobal::displayInfo(MString("centroid point: ") + centroid.x + ", " + centroid.y + ", " + centroid.z);
 
     return MS::kSuccess;
 }
@@ -270,11 +264,6 @@ MStatus Smear::computeCentroidTrajectory(double startFrame, double endFrame, con
         MPoint transformedOffset = MPoint(centroidOffset) * transformationMatrices[frame].asMatrix();
 
         centroidPositions[frame] = MVector(transformedOffset);
-
-        MGlobal::displayInfo("Centroid Position (" + MString() +
-            centroidPositions[frame].x + ", " +
-            centroidPositions[frame].y + ", " +
-            centroidPositions[frame].z + ")");
     }
 
     return MS::kSuccess;
@@ -321,18 +310,6 @@ MStatus Smear::computeSignedDistanceToPlane(const MPoint& point, const MPoint& p
 
 MStatus Smear::calculatePerFrameMotionOffsets(const MPointArray& objectSpaceVertices, const MTransformationMatrix& transformationMatrix, const MPoint& centroid, const MVector& centroidVelocity, MDoubleArray& motionOffsets)
 {
-    MString matrixMsg = "Transformation Matrix:\n";
-    for (int row = 0; row < 4; ++row) {
-        matrixMsg += "  ";
-        for (int col = 0; col < 4; ++col) {
-            matrixMsg += transformationMatrix.asMatrix()(row, col);
-            if (col < 3) matrixMsg += ", ";
-        }
-        matrixMsg += "\n";
-    }
-    MGlobal::displayInfo(matrixMsg);
-
-
     MStatus status;
     // Store the magnitude of the largest motion offset
     // to be used in normalizing motion offsets later
@@ -343,38 +320,6 @@ MStatus Smear::calculatePerFrameMotionOffsets(const MPointArray& objectSpaceVert
     int vertCount = objectSpaceVertices.length();
     status = motionOffsets.setLength(vertCount);
     McheckErr(status, "SmearNode::computeMotionOffsets - invalid vertex count!");
-
-    MString debugMsg = "Velocity normal (" + MString() +
-        centroidVelocity.normal().x + ", " +
-        centroidVelocity.normal().y + ", " +
-        centroidVelocity.normal().z + ")";
-    MGlobal::displayInfo(debugMsg);
-
-    MString debugMsgC = "Centroid (" + MString() +
-        centroid.x + ", " +
-        centroid.y + ", " +
-        centroid.z + ")";
-    MGlobal::displayInfo(debugMsgC);
-
-    //MVector v_hat = centroidVelocity.normal();
-    //for (int i = 0; i < vertCount; ++i) {
-    //    MVector p_i = vertexPositions[i] - centroid;
-
-    //    MString debugMsgC = "p_i (" + MString() +
-    //        p_i.x + ", " +
-    //        p_i.y + ", " +
-    //        p_i.z + ")";
-    //    MGlobal::displayInfo(debugMsgC);
-    //    motionOffsets[i] = p_i.x * v_hat.x + p_i.y * v_hat.y + p_i.z * v_hat.z;
-    //    maxMotionOffsetMag = std::max(maxMotionOffsetMag, std::abs(motionOffsets[i]));
-    //}
-    for (int i = 0; i < vertCount; ++i) {
-        const MPoint& objectSpaceVertexPosition = objectSpaceVertices[i];
-        //MPoint worldSpaceVertexPosition = objectSpaceVertexPosition * transformationMatrices[i];
-        MPoint worldSpaceVertexPosition = objectSpaceVertexPosition * transformationMatrix.asMatrix();
-
-        MGlobal::displayInfo(MString() + worldSpaceVertexPosition.x + " " + worldSpaceVertexPosition.y + " " + worldSpaceVertexPosition.z + " " + worldSpaceVertexPosition.w);
-    }
 
     for (int i = 0; i < vertCount; ++i) {
         double& motionOffset = motionOffsets[i];
@@ -387,7 +332,6 @@ MStatus Smear::calculatePerFrameMotionOffsets(const MPointArray& objectSpaceVert
         
         // Check the magnitude of motion offset and record if it's the largest so far 
         maxMotionOffsetMag = std::max(maxMotionOffsetMag, std::abs(motionOffset));
-        MGlobal::displayInfo(MString("Motion Offset Pre: ") + motionOffsets[i]);
     }
 
     // Normalize motion offsets 
@@ -450,6 +394,10 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     status = extractAnimationFrameRange(transformPath, startFrame, endFrame);
     MGlobal::displayInfo("Smear::computeCentroidTrajectory - startframe: " + MString() + startFrame + " endFrame: " + endFrame);
     McheckErr(status, "Failed to extract animation frame range.");
+    motionOffsets.startFrame = startFrame;
+    motionOffsets.endFrame = endFrame;
+
+    MGlobal::displayInfo(MString("Start Frame: ") + startFrame + MString("End Frame: ") + endFrame);
 
     // Compute the centroid offset so that we can use this to 
     // quickly find the centroid based on pivot location 
@@ -480,15 +428,13 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
         MGlobal::displayError("No motion detected.");
         return MS::kFailure;
     }
-
+    
     motionOffsets.motionOffsets.resize(numFrames);
     MFnMesh meshFn(shapePath, &status);
     McheckErr(status, "computeMotionOffsetsSimple: Failed to create MFnMesh.");
     int numVertices = meshFn.numVertices();
 
     MGlobal::displayInfo(MString("Num Frames: ") + numFrames);
-    
-    
 
     for (int i = 0; i < centroidVelocities.size() ; ++i) {
         MGlobal::displayInfo("Frame: " + i);
@@ -507,35 +453,9 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
 
         MDoubleArray& currentFrameMotionOffsets = motionOffsets.motionOffsets[frame];
         status = calculatePerFrameMotionOffsets(objectSpaceVertices, transformationMatrices[frame], centroidPositions[frame], centroidVelocities[frame], currentFrameMotionOffsets);
-        McheckErr(status, "Faield to calculate per frame motion offset for frame " + MString() + frame); 
+        McheckErr(status, "Failed to calculate per frame motion offset for frame " + MString() + frame); 
     }
     
-
-    // ==========================================================
-    // DEBUGGING: Tracking function calls and setting dummy data
-    // ==========================================================
-    
-    /*
-    // Tracking how many times this function has been called to debug 
-    // motion offset caching realted issues in SmearNode
-    static int functionInvocationCount = 0;
-    functionInvocationCount++;
-    MGlobal::displayInfo(MString("Function has been called ") + functionInvocationCount + " times.");
-
-    // Craeate dummy data 
-    motionOffsets.startFrame = 0; 
-    motionOffsets.endFrame = 5; 
-    motionOffsets.motionOffsets.resize(2); // Create two frames of data
-    int vertexCount = 5; 
-    // Fill each frame with dummy motion offsets
-    for (int i = 0; i < motionOffsets.endFrame; ++i) {
-        motionOffsets.motionOffsets[i].setLength(vertexCount); // Assume 3 vertices for testing
-        for (int j = 0; j < vertexCount; ++j) {
-            motionOffsets.motionOffsets[i][j] = MVector(i * 5, i * 5, i * 5);
-        }
-    }
-    */
-
     return MS::kSuccess;
 }
 

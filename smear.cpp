@@ -284,25 +284,16 @@ MStatus Smear::computeCentroidVelocity(const std::vector<MVector>& centroidPosit
     //MGlobal::displayInfo("Smear::computeCentroidVelocity - centroid positions");
     for (int frame = 0; frame < numFrames - 1; ++frame) {
         centroidVelocities[frame] = centroidPositions[frame + 1] - centroidPositions[frame];
-
-        // Print for debugging
-        /*
-        MString debugMsg = "(" + MString() +
-            centroidVelocities[frame].x + ", " +
-            centroidVelocities[frame].y + ", " +
-            centroidVelocities[frame].z + ")";
-        MGlobal::displayInfo(debugMsg);
-        */
     }
 
     return MS::kSuccess;
 }
+
 MStatus Smear::computeSignedDistanceToPlane(const MPoint& point, const MPoint& pointOnPlane, const MVector& planeNormal, double& signedDist)
 {
     MStatus status;
 
     MVector diff = point - pointOnPlane;
-
     signedDist = diff * planeNormal;  // Dot product
 
     return MS::kSuccess;
@@ -372,7 +363,6 @@ MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, double frame, MPoin
     return MS::kSuccess; 
 }
 
-
 MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagPath& transformPath, MotionOffsetsSimple& motionOffsets) {
     MStatus status;
     
@@ -423,7 +413,7 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     status = computeCentroidVelocity(centroidPositions, centroidVelocities);
     McheckErr(status, "Failed to compute centroid velocity.");
     
-    int numFrames = static_cast<int>(centroidVelocities.size());
+    const int numFrames = static_cast<int>(endFrame - startFrame + 1);
     if (numFrames == 0) {
         MGlobal::displayError("No motion detected.");
         return MS::kFailure;
@@ -447,9 +437,18 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     status = meshFn.getPoints(objectSpaceVertices, MSpace::kObject);
     McheckErr(status, "Smear::computeMotionOffsetsSimple - Failed to get object space vertex positions");
     
+    MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Num Frames frame:" + MString() + numFrames);
+
+    // Store vertex trajectories
+    motionOffsets.vertexTrajectories.resize(numFrames);
+    MPointArray frameVertices;
+
     // Iterate through each frame to find motion offsets for each frame
     for (int frame = 0; frame < numFrames; ++frame) {
         MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Current frame:" + MString() + frame);
+
+        getVerticesAtFrame(shapePath, startFrame + frame, frameVertices);
+        motionOffsets.vertexTrajectories[frame] = frameVertices;
 
         MDoubleArray& currentFrameMotionOffsets = motionOffsets.motionOffsets[frame];
         status = calculatePerFrameMotionOffsets(objectSpaceVertices, transformationMatrices[frame], centroidPositions[frame], centroidVelocities[frame], currentFrameMotionOffsets);

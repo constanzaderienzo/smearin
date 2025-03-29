@@ -13,6 +13,7 @@ struct MotionOffsetsSimple {
     double startFrame;
     double endFrame;
     std::vector<MDoubleArray> motionOffsets;  // 2D: motionOffsets[frame][vertex]
+    std::vector<MPointArray> vertexTrajectories; // Store per-vertex trajectory
 };
 
 class Smear

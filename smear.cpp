@@ -128,87 +128,63 @@ bool compareTransformComponents(MTransformationMatrix::RotationOrder rotOrder, c
 }
 
 
-MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
-    const double startFrame,
-    const double endFrame,
-    std::vector<MTransformationMatrix>& transformationMatrices) {
+MStatus Smear::cacheInclusiveTransforms(
+    const MDagPath& transformPath,
+    double startFrame,
+    double endFrame,
+    std::vector<MMatrix>& inclusiveTransforms)
+{
     MStatus status;
 
+    // Sanity check
     if (!transformPath.hasFn(MFn::kTransform)) {
-        MGlobal::displayError("Smear::computeWorldTransformPerFrame - transformPath is not a transform node.");
+        MGlobal::displayError("Smear::cacheInclusiveTransforms - transformPath is not a transform node.");
         return MS::kFailure;
     }
 
-    MFnDependencyNode depNode(transformPath.node(), &status);
-    McheckErr(status, "Failed to create MFnDependencyNode");
-
-    auto numFrames = static_cast<int>(endFrame - startFrame + 1);
-    transformationMatrices.resize(numFrames);
-
-    // Get the transform's rotation order
-    MFnTransform fnTransform(transformPath.node(), &status);
-    McheckErr(status, "Failed to get MFnTransform");
-
-    MTransformationMatrix::RotationOrder rotOrder = fnTransform.rotationOrder();
-
-    for (int frame = 0; frame < numFrames; ++frame) {
-        MTime currentTime(startFrame + frame, MTime::uiUnit());
-        MDGContext context(currentTime);
-
-        // Get plugs for transform attributes
-        MPlug translatePlug = depNode.findPlug("translate", true);
-        MPlug rotatePlug = depNode.findPlug("rotate", true);
-        MPlug scalePlug = depNode.findPlug("scale", true);
-
-        // Evaluate plugs at this time
-        MVector translation(
-            translatePlug.child(0).asDouble(context),
-            translatePlug.child(1).asDouble(context),
-            translatePlug.child(2).asDouble(context));
-
-        double rotation[3] = {
-            rotatePlug.child(0).asDouble(context),
-            rotatePlug.child(1).asDouble(context),
-            rotatePlug.child(2).asDouble(context) };
-
-        double scale[3] = {
-            scalePlug.child(0).asDouble(context),
-            scalePlug.child(1).asDouble(context),
-            scalePlug.child(2).asDouble(context)};
-
-        // Build transform matrix manually
-        MTransformationMatrix xform;
-        xform.setTranslation(translation, MSpace::kTransform);
-        xform.setRotation(rotation, rotOrder);
-        xform.setScale(scale, MSpace::kTransform);
-        transformationMatrices[frame] = xform;
-
-        // Debug print
-        
-        //MString msg = MString() + "Frame " + frame + ":\n"
-        //+ "  Translation = (" +
-        //    translation.x + ", " +
-        //    translation.y + ", " +
-        //    translation.z + ")\n"
-
-        //+ "  Rotation (XYZ degrees) = (" +
-        //    rotation[0] + ", " +
-        //    rotation[1] + ", " +
-        //    rotation[2] + ")\n"
-
-        //+ "  Scale = (" +
-        //    scale[0] + ", " +
-        //    scale[1] + ", " +
-        //    scale[2] + ")";
-        //MGlobal::displayInfo(msg);
-        
+    // Figure out how many frames we need to sample
+    const int numFrames = static_cast<int>(endFrame - startFrame + 1);
+    if (numFrames <= 0) {
+        MGlobal::displayWarning("No frames to sample.");
+        return MS::kSuccess;
     }
+    inclusiveTransforms.resize(numFrames);
+
+    // Save the current scene time to restore later
+    MTime oldTime = MAnimControl::currentTime();
+
+    // For each frame, set the scene time and grab the inclusive matrix
+    for (int i = 0; i < numFrames; ++i) {
+        double frameTime = startFrame + i;
+
+        // Set the global Maya time to this frame
+        MTime currentTime(frameTime, MTime::uiUnit());
+        MAnimControl::setCurrentTime(currentTime);
+
+        // Now, query the inclusive matrix from the transformPath
+        MMatrix incMat = transformPath.inclusiveMatrix(&status);
+        if (!status) {
+            MGlobal::displayError(MString() + "Failed to get inclusiveMatrix for frame " + frameTime);
+            continue;
+        }
+
+        // Store as an MTransformationMatrix for convenience
+        inclusiveTransforms[i] = incMat; 
+
+        // Optional: debug print
+        // MGlobal::displayInfo(MString() + "Frame: " + frameTime + 
+        //                     ", incMat: " + matrixToString(incMat) );
+    }
+
+    // Restore original scene time
+    MAnimControl::setCurrentTime(oldTime);
 
     return MS::kSuccess;
 }
 
 
-MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const MDagPath& transformPath, MVector& centroidOffset) {
+
+MStatus Smear::computeCentroidLocal(const MDagPath& shapePath, const MDagPath& transformPath, MVector & centroidLocal) {
     MStatus status;
 
     // Check if the provided path point to correct node types.
@@ -234,25 +210,19 @@ MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const
     // Debug: Print vertex positions
     //MGlobal::displayInfo("Vertex positions:");
     for (; !vertexIt.isDone(); vertexIt.next()) {
-        MPoint vertexPos = vertexIt.position(MSpace::kWorld);
+        MPoint vertexPos = vertexIt.position(MSpace::kObject);
         //MGlobal::displayInfo(MString("Vertex ") + vertexIt.index() + ": " + vertexPos.x + ", " + vertexPos.y + ", " + vertexPos.z);
         sum += vertexPos;
     }
 
-    MVector centroid = (numVertices > 0) ? sum / numVertices : MVector(0.0, 0.0, 0.0);
+    MVector centroidObjectSpace = (numVertices > 0) ? sum / numVertices : MVector(0.0, 0.0, 0.0);
 
-    MPoint pivotPoint = transformPath.inclusiveMatrix()[3]; // Get the translation component of the matrix
-    MVector pivot(pivotPoint.x, pivotPoint.y, pivotPoint.z);
-
-    // Debug: Print the pivot point
-
-    // Calculate the centroid offset
-    centroidOffset = centroid - pivot;
+    centroidLocal = centroidObjectSpace;
 
     return MS::kSuccess;
 }
 
-MStatus Smear::computeCentroidTrajectory(double startFrame, double endFrame, const std::vector<MTransformationMatrix>& transformationMatrices, 
+MStatus Smear::computeCentroidTrajectoryWorld(double startFrame, double endFrame, const std::vector<MMatrix>& inclusiveMatrices, 
                                          const MVector& centroidOffset, std::vector<MVector>& centroidPositions) {
     MStatus status;
     int numFrames = static_cast<int>(endFrame - startFrame + 1);
@@ -261,7 +231,7 @@ MStatus Smear::computeCentroidTrajectory(double startFrame, double endFrame, con
     for (int frame = 0; frame < numFrames; ++frame) {
         // Find how the position of the centroid changes based on the pivot's transformations (how it moves, rotates, scales) 
         // by multiplying the transform to centroid offset 
-        MPoint transformedOffset = MPoint(centroidOffset) * transformationMatrices[frame].asMatrix();
+        MPoint transformedOffset = MPoint(centroidOffset) * inclusiveMatrices[frame];
 
         centroidPositions[frame] = MVector(transformedOffset);
     }
@@ -392,20 +362,20 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     // Compute the centroid offset so that we can use this to 
     // quickly find the centroid based on pivot location 
     // Centroid is found through average position of vertex positions
-    MVector centroidOffset;
-    status = calculateCentroidOffsetFromPivot(shapePath, transformPath, centroidOffset);
+    MVector centroidLocal;
+    status = computeCentroidLocal(shapePath, transformPath, centroidLocal);
     McheckErr(status, "Failed to calculate centroid offset.");
 
     // Parse all the transformations from each frame to see how the pivot moves from animation 
-    std::vector<MTransformationMatrix> transformationMatrices;
-    status = computeWorldTransformPerFrame(transformPath, startFrame, endFrame, transformationMatrices);
+    std::vector<MMatrix> inclusiveMatrices;
+    status = cacheInclusiveTransforms(transformPath, startFrame, endFrame, inclusiveMatrices);
     McheckErr(status, "Failed to compute world transforms.");
 
 
     // Calculate the centroid's positions over time 
     std::vector<MVector> centroidPositions; 
-    status = computeCentroidTrajectory(startFrame, endFrame, transformationMatrices,
-        centroidOffset, centroidPositions);
+    status = computeCentroidTrajectoryWorld(startFrame, endFrame, inclusiveMatrices,
+        centroidLocal, centroidPositions);
     
     // Just passing along centroid velocity for now 
     // No real motion offset calculation yet 
@@ -451,7 +421,7 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
         motionOffsets.vertexTrajectories[frame] = frameVertices;
 
         MDoubleArray& currentFrameMotionOffsets = motionOffsets.motionOffsets[frame];
-        status = calculatePerFrameMotionOffsets(objectSpaceVertices, transformationMatrices[frame], centroidPositions[frame], centroidVelocities[frame], currentFrameMotionOffsets);
+        status = calculatePerFrameMotionOffsets(objectSpaceVertices, inclusiveMatrices[frame], centroidPositions[frame], centroidVelocities[frame], currentFrameMotionOffsets);
         McheckErr(status, "Failed to calculate per frame motion offset for frame " + MString() + frame); 
     }
     

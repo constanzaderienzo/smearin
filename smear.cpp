@@ -336,73 +336,6 @@ MStatus Smear::calculatePerFrameMotionOffsets(const MPointArray& objectSpaceVert
     return MS::kSuccess; 
 }
 
-MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& transformPath, double frame, MPointArray& vertices) {
-    MStatus status;
-
-    // 1. Set up frame evaluation context
-    MTime evalTime(frame, MTime::kFilm);
-    MDGContext ctx(evalTime);
-    MGlobal::displayInfo(MString("Evaluating frame: ") + frame +
-        " at time: " + evalTime.as(MTime::uiUnit()));
-
-    // 2. Get worldMatrix array plug
-    MFnDependencyNode transformFn(transformPath.node());
-    MPlug worldMatrixPlug = transformFn.findPlug("worldMatrix", true, &status);
-    McheckErr(status, "Failed to find worldMatrix plug");
-
-    // 3. Access first element of worldMatrix array
-    MPlug elementPlug = worldMatrixPlug.elementByLogicalIndex(0, &status);
-    McheckErr(status, "Failed to get worldMatrix[0]");
-        
-    // 4. Get matrix data in context
-    MObject matrixData;
-    elementPlug.getValue(matrixData, ctx);
-    if (matrixData.isNull()) {
-        MGlobal::displayError("Null matrix data received");
-        return MS::kFailure;
-    }
-
-    // 5. Validate matrix data type
-    if (!matrixData.hasFn(MFn::kMatrixData)) {
-        MGlobal::displayError("Matrix data has incorrect type");
-        return MS::kFailure;
-    }
-
-    // 6. Extract matrix from data
-    MFnMatrixData matrixFn(matrixData, &status);
-    McheckErr(status, "Failed to create MFnMatrixData");
-
-    MMatrix worldMatrix = matrixFn.matrix();
-
-    // 7. Get object-space vertices in context
-    MFnDependencyNode shapeNode(shapePath.node());
-    MPlug outMeshPlug = shapeNode.findPlug("outMesh", true, &status);
-    McheckErr(status, "Failed to find outMesh plug");
-
-    MObject meshData;
-    outMeshPlug.getValue(meshData, ctx);
-    if (meshData.isNull()) {
-        MGlobal::displayError("Null mesh data received");
-        return MS::kFailure;
-    }
-
-    // 8. Get object-space vertices
-    MFnMesh meshFn(meshData, &status);
-    McheckErr(status, "Failed to create MFnMesh")
-
-    MPointArray objSpaceVerts;
-    status = meshFn.getPoints(objSpaceVerts, MSpace::kObject);
-    McheckErr(status, "Failed to get object-space vertices");
-
-    // 9. Transform to world space
-    vertices.setLength(objSpaceVerts.length());
-    for (unsigned int i = 0; i < objSpaceVerts.length(); ++i) {
-        vertices[i] = objSpaceVerts[i] * worldMatrix;
-    }
-
-    return MS::kSuccess;
-}
-
 MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagPath& transformPath, MotionOffsetsSimple& motionOffsets) {
     MStatus status;
     
@@ -487,10 +420,9 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     for (int frame = 0; frame < numFrames; ++frame) {
         MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Current frame:" + MString() + frame);
 
-        status = getVerticesAtFrame(shapePath, transformPath, startFrame + frame, vertices);
-        McheckErr(status, "Failed to get world-space vertices");
-
-        motionOffsets.vertexTrajectories[frame] = vertices;
+        MPointArray objSpaceVerts;
+        meshFn.getPoints(objSpaceVerts, MSpace::kObject);
+        motionOffsets.vertexTrajectories[frame] = objSpaceVerts;
 
         MDoubleArray& currentFrameMotionOffsets = motionOffsets.motionOffsets[frame];
         status = calculatePerFrameMotionOffsets(objectSpaceVertices, transformationMatrices[frame], centroidPositions[frame], centroidVelocities[frame], currentFrameMotionOffsets);

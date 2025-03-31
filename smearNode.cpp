@@ -14,6 +14,7 @@
 #include <maya/MTime.h>
 #include <maya/MFnNumericAttribute.h>
 #include <maya/MDagPath.h>
+#include <maya/MItGeometry.h>
 
 #include "smear.h" // Include the Smear header
 // Replace the vertex loop with parallel processing:
@@ -27,8 +28,10 @@
 
 MTypeId SmearNode::id(0x98520); // Random id 
 MObject SmearNode::time;
-MObject SmearNode::inputMesh;
-MObject SmearNode::outputMesh;
+MObject SmearNode::inputGeom; 
+MObject SmearNode::outputGeom;
+MObject SmearNode::betaMax;
+MObject SmearNode::enableDeformation;
 
 MStatus SmearNode::getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug & inputMeshPlug, MDagPath & transformPath, MDagPath & shapePath) const
 {
@@ -92,35 +95,53 @@ MStatus SmearNode::initialize() {
     addAttribute(time);
 
     // Input mesh
-    inputMesh = typedAttr.create("inputMesh", "in", MFnData::kMesh);
+    inputGeom = typedAttr.create("inputGeom", "ig", MFnData::kMesh);
     typedAttr.setStorable(true);
-    addAttribute(inputMesh);
+    typedAttr.setWritable(true);
+    addAttribute(inputGeom);
 
     // Output mesh
-    outputMesh = typedAttr.create("outputMesh", "out", MFnData::kMesh);
+    outputGeom = typedAttr.create("outputGeom", "out", MFnData::kMesh);
     typedAttr.setWritable(false);
     typedAttr.setStorable(false);
-    addAttribute(outputMesh);
+    addAttribute(outputGeom);
 
+    enableDeformation = numericAttr.create("enableDeformation", "ed", MFnNumericData::kBoolean, 1);
+    addAttribute(enableDeformation);
+
+    betaMax = numericAttr.create("betaMax", "bm", MFnNumericData::kDouble, 1.0);
+    numericAttr.setMin(0.0);
+    numericAttr.setMax(5.0);
+    addAttribute(betaMax);
 
     // Affects relationships
-    attributeAffects(time, outputMesh);
-    attributeAffects(inputMesh, outputMesh);
+    attributeAffects(enableDeformation, outputGeom);
+    attributeAffects(betaMax, outputGeom);
+    attributeAffects(time, outputGeom);
+    attributeAffects(inputGeom, outputGeom);
 
     return MS::kSuccess;
 }
 
-MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
-    if (plug != outputMesh) return MS::kUnknownParameter;
-
+MStatus SmearNode::deform(MDataBlock& block,
+    MItGeometry& iter,
+    const MMatrix& localToWorldMatrix,
+    unsigned int multiIndex)
+{
     MStatus status;
 
-    // +++ Get time value +++
-    MTime currentTime = data.inputValue(time, &status).asTime();
-    McheckErr(status, "Failed to get time value");
-    double frame = currentTime.as(MTime::kFilm);  // Get time in frames
+    // Get parameters
+    const bool enableDef = block.inputValue(enableDeformation).asBool();
+    const double betaMaxVal = block.inputValue(betaMax).asDouble();
 
-    MDataHandle inputHandle = data.inputValue(inputMesh, &status);
+    if (!enableDef || !motionOffsetsBaked)
+        return MS::kSuccess;
+
+    // Validate frame data
+    MTime currentTime = block.inputValue(time).asTime();
+    const double frame = currentTime.as(MTime::kFilm);
+
+    MDataHandle inputHandle = data.inputValue(inputGeom, &status);
     McheckErr(status, "Failed to get input mesh");
     MObject inputObj = inputHandle.asMesh();
 
@@ -141,12 +162,12 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
 
     // Get DAG paths for mesh and transform
     MFnDependencyNode thisNodeFn(thisMObject());
-    MPlug inputPlug = thisNodeFn.findPlug(inputMesh, true);
+    MPlug inputPlug = thisNodeFn.findPlug(inputGeom, true);
 
     MDagPath shapePath, transformPath;
     status = getDagPathsFromInputMesh(inputObj, inputPlug, transformPath, shapePath);
     McheckErr(status, "Failed to tranform path and shape path from input object");
-    
+
     // Cast copied Mesh into MfnMesh
     MFnMesh outputFn(copiedMesh, &status);
     McheckErr(status, "Output mesh init failed");
@@ -164,51 +185,68 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         motionOffsetsBaked = true;
     }
 
-    int frameIndex = static_cast<int>(frame - motionOffsetsSimple.startFrame);
+    const int frameIndex = static_cast<int>(frame - motionOffsetsSimple.startFrame);
 
-    MGlobal::displayInfo("Current frame: " + MString() + frame +
-        " Start frame: " + motionOffsetsSimple.startFrame +
-        " Frame index: " + frameIndex);
-
-    if (frameIndex < 0 || frameIndex >= motionOffsetsSimple.motionOffsets.size()) {
+    if (frameIndex < 0 || frameIndex >= motionOffsetsSimple.motionOffsets.size())
         return MS::kSuccess;
+
+    // Get trajectory data
+    const MDoubleArray& offsets = motionOffsetsSimple.motionOffsets[frameIndex];
+    const std::vector<MPointArray>& trajectories = motionOffsetsSimple.vertexTrajectories;
+
+    // Parallel deformation
+    float weight = weightValue(block, multiIndex, iter.index());
+    MPoint point;
+
+    for (; !iter.isDone(); iter.next()) {
+        const int vertIdx = iter.index();
+
+        if (vertIdx >= offsets.length())
+            continue;
+
+        // Get trajectory points
+        double beta = offsets[vertIdx] * betaMaxVal * weight;
+        int baseFrame = frameIndex + static_cast<int>(floor(beta));
+        double t = beta - floor(beta);
+
+        // Clamp indices to valid range
+        const int numFrames = trajectories.size();
+        int f0 = std::max(0, baseFrame - 1);
+        int f1 = std::max(0, std::min(numFrames - 1, baseFrame));
+        int f2 = std::min(numFrames - 1, baseFrame + 1);
+        int f3 = std::min(numFrames - 1, baseFrame + 2);
+
+        // Get positions from trajectories
+        const MPoint& p0 = trajectories[f0][vertIdx];
+        const MPoint& p1 = trajectories[f1][vertIdx];
+        const MPoint& p2 = trajectories[f2][vertIdx];
+        const MPoint& p3 = trajectories[f3][vertIdx];
+
+        // Apply interpolation
+        point = iter.position();
+        point = catmullRomInterpolate(p0, p1, p2, p3, t);
+        iter.setPosition(point);
     }
-
-    MDoubleArray& currentFrameOffsets = motionOffsetsSimple.motionOffsets[frameIndex];
-    if (currentFrameOffsets.length() != numVertices) {
-        MGlobal::displayError("Offset/vertex count mismatch");
-        return MS::kFailure;
-    }
-
-    // +++ Map motion offsets to colors +++
-    MColorArray colors(numVertices);
-    MIntArray vtxIndices(numVertices);
-
-    for (int i = 0; i < numVertices; ++i) {
-        double offset = currentFrameOffsets[i];
-        colors[i] = computeColor(offset);
-        vtxIndices[i] = i;  
-    }
-
-    // Create/update color set
-    const MString colorSet("smearSet");
-
-    outputFn.createColorSetWithName(colorSet);
-    outputFn.setCurrentColorSetName(colorSet);
-
-    // +++ Apply colors to specific color set +++
-    status = outputFn.setVertexColors(colors, vtxIndices);
-    McheckErr(status, "Failed to set colors");
-
-    // Force viewport update
-    outputFn.updateSurface();
-
-    // Set output
-    data.outputValue(outputMesh).set(newOutput);
-    data.setClean(plug);
 
     return MS::kSuccess;
 }
+
+
+MPoint SmearNode::catmullRomInterpolate(const MPoint& p0, const MPoint& p1,
+    const MPoint& p2, const MPoint& p3,
+    double t) {
+    // Basis matrix coefficients
+    const double t2 = t * t;
+    const double t3 = t2 * t;
+
+    return 0.5 * (
+        (-1*p0 + 3 * p1 - 3 * p2 + p3) * t3 +
+        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+        (-1*p0 + p2) * t +
+        2 * p1
+        );
+}
+
 
 MColor SmearNode::computeColor(double offset) {
     if (offset > 0.01) {

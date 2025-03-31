@@ -12,6 +12,7 @@
 #include <maya/MSelectionList.h>
 #include <maya/MMatrix.h>
 #include <maya/MDagPath.h>
+#include <maya/MFnMatrixData.h>
 
 #define McheckErr(stat, msg)        \
     if (MS::kSuccess != stat) {     \
@@ -208,7 +209,7 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
 }
 
 
-MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const MDagPath& transformPath, MVector& centroidOffset) {
+MStatus Smear::computeCentroidLocal(const MDagPath& shapePath, const MDagPath& transformPath, MVector& centroidLocal) {
     MStatus status;
 
     // Check if the provided path point to correct node types.
@@ -234,26 +235,18 @@ MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const
     // Debug: Print vertex positions
     //MGlobal::displayInfo("Vertex positions:");
     for (; !vertexIt.isDone(); vertexIt.next()) {
-        MPoint vertexPos = vertexIt.position(MSpace::kWorld);
+        MPoint vertexPos = vertexIt.position(MSpace::kObject);
         //MGlobal::displayInfo(MString("Vertex ") + vertexIt.index() + ": " + vertexPos.x + ", " + vertexPos.y + ", " + vertexPos.z);
         sum += vertexPos;
     }
 
-    MVector centroid = (numVertices > 0) ? sum / numVertices : MVector(0.0, 0.0, 0.0);
-
-    MPoint pivotPoint = transformPath.inclusiveMatrix()[3]; // Get the translation component of the matrix
-    MVector pivot(pivotPoint.x, pivotPoint.y, pivotPoint.z);
-
-    // Debug: Print the pivot point
-
-    // Calculate the centroid offset
-    centroidOffset = centroid - pivot;
+    centroidLocal = (numVertices > 0) ? sum / numVertices : MVector(0.0, 0.0, 0.0);
 
     return MS::kSuccess;
 }
 
 MStatus Smear::computeCentroidTrajectory(double startFrame, double endFrame, const std::vector<MTransformationMatrix>& transformationMatrices, 
-                                         const MVector& centroidOffset, std::vector<MVector>& centroidPositions) {
+                                         const MVector& centroidLocal, std::vector<MVector>& centroidPositions) {
     MStatus status;
     int numFrames = static_cast<int>(endFrame - startFrame + 1);
     centroidPositions.resize(numFrames);
@@ -261,7 +254,7 @@ MStatus Smear::computeCentroidTrajectory(double startFrame, double endFrame, con
     for (int frame = 0; frame < numFrames; ++frame) {
         // Find how the position of the centroid changes based on the pivot's transformations (how it moves, rotates, scales) 
         // by multiplying the transform to centroid offset 
-        MPoint transformedOffset = MPoint(centroidOffset) * transformationMatrices[frame].asMatrix();
+        MPoint transformedOffset = MPoint(centroidLocal) * transformationMatrices[frame].asMatrix();
 
         centroidPositions[frame] = MVector(transformedOffset);
     }
@@ -284,25 +277,16 @@ MStatus Smear::computeCentroidVelocity(const std::vector<MVector>& centroidPosit
     //MGlobal::displayInfo("Smear::computeCentroidVelocity - centroid positions");
     for (int frame = 0; frame < numFrames - 1; ++frame) {
         centroidVelocities[frame] = centroidPositions[frame + 1] - centroidPositions[frame];
-
-        // Print for debugging
-        /*
-        MString debugMsg = "(" + MString() +
-            centroidVelocities[frame].x + ", " +
-            centroidVelocities[frame].y + ", " +
-            centroidVelocities[frame].z + ")";
-        MGlobal::displayInfo(debugMsg);
-        */
     }
 
     return MS::kSuccess;
 }
+
 MStatus Smear::computeSignedDistanceToPlane(const MPoint& point, const MPoint& pointOnPlane, const MVector& planeNormal, double& signedDist)
 {
     MStatus status;
 
     MVector diff = point - pointOnPlane;
-
     signedDist = diff * planeNormal;  // Dot product
 
     return MS::kSuccess;
@@ -344,34 +328,72 @@ MStatus Smear::calculatePerFrameMotionOffsets(const MPointArray& objectSpaceVert
     return MS::kSuccess; 
 }
 
-MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, double frame, MPointArray& vertices)
-{
-    MStatus status; 
-    MTime currentTime(frame, MTime::uiUnit());
-    MDGContext context(currentTime);
+MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& transformPath, double frame, MPointArray& vertices) {
+    MStatus status;
 
-    // Use MFnMesh in the evaluation context
-    MFnMesh meshFn(shapePath.node(), &status);
-    McheckErr(status, "Failed to create MFnMesh in frame context");
+    // 1. Set up frame evaluation context
+    MTime evalTime(frame, MTime::kFilm);
+    MDGContext ctx(evalTime);
+    MGlobal::displayInfo(MString("Evaluating frame: ") + frame +
+        " at time: " + evalTime.as(MTime::uiUnit()));
 
-    // Create a context-aware plug for input geometry
-    MObject meshObj = shapePath.node();
-    MFnDependencyNode depNode(meshObj);
-    MPlug outMeshPlug = depNode.findPlug("outMesh", true, &status);
+    // 2. Get worldMatrix array plug
+    MFnDependencyNode transformFn(transformPath.node());
+    MPlug worldMatrixPlug = transformFn.findPlug("worldMatrix", true, &status);
+    McheckErr(status, "Failed to find worldMatrix plug");
+
+    // 3. Access first element of worldMatrix array
+    MPlug elementPlug = worldMatrixPlug.elementByLogicalIndex(0, &status);
+    McheckErr(status, "Failed to get worldMatrix[0]");
+        
+    // 4. Get matrix data in context
+    MObject matrixData;
+    elementPlug.getValue(matrixData, ctx);
+    if (matrixData.isNull()) {
+        MGlobal::displayError("Null matrix data received");
+        return MS::kFailure;
+    }
+
+    // 5. Validate matrix data type
+    if (!matrixData.hasFn(MFn::kMatrixData)) {
+        MGlobal::displayError("Matrix data has incorrect type");
+        return MS::kFailure;
+    }
+
+    // 6. Extract matrix from data
+    MFnMatrixData matrixFn(matrixData, &status);
+    McheckErr(status, "Failed to create MFnMatrixData");
+
+    MMatrix worldMatrix = matrixFn.matrix();
+
+    // 7. Get object-space vertices in context
+    MFnDependencyNode shapeNode(shapePath.node());
+    MPlug outMeshPlug = shapeNode.findPlug("outMesh", true, &status);
     McheckErr(status, "Failed to find outMesh plug");
 
-    MObject meshDataObj;
-    outMeshPlug.getValue(meshDataObj, context); // Evaluate plug at specific time
+    MObject meshData;
+    outMeshPlug.getValue(meshData, ctx);
+    if (meshData.isNull()) {
+        MGlobal::displayError("Null mesh data received");
+        return MS::kFailure;
+    }
 
-    MFnMesh frameMesh(meshDataObj, &status); // meshDataObj is a mesh shape at this time
-    McheckErr(status, "Failed to create MFnMesh from data object");
+    // 8. Get object-space vertices
+    MFnMesh meshFn(meshData, &status);
+    McheckErr(status, "Failed to create MFnMesh")
 
-    status = frameMesh.getPoints(vertices, MSpace::kWorld);
-    McheckErr(status, "Failed to get points for frame " + MString() + frame);
+    MPointArray objSpaceVerts;
+    status = meshFn.getPoints(objSpaceVerts, MSpace::kObject);
+    McheckErr(status, "Failed to get object-space vertices");
 
-    return MS::kSuccess; 
+    // 9. Transform to world space
+    vertices.setLength(objSpaceVerts.length());
+    for (unsigned int i = 0; i < objSpaceVerts.length(); ++i) {
+        vertices[i] = objSpaceVerts[i] * worldMatrix;
+    }
+
+    return MS::kSuccess;
 }
-
 
 MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagPath& transformPath, MotionOffsetsSimple& motionOffsets) {
     MStatus status;
@@ -399,23 +421,21 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
 
     MGlobal::displayInfo(MString("Start Frame: ") + startFrame + MString("End Frame: ") + endFrame);
 
-    // Compute the centroid offset so that we can use this to 
-    // quickly find the centroid based on pivot location 
-    // Centroid is found through average position of vertex positions
-    MVector centroidOffset;
-    status = calculateCentroidOffsetFromPivot(shapePath, transformPath, centroidOffset);
-    McheckErr(status, "Failed to calculate centroid offset.");
-
     // Parse all the transformations from each frame to see how the pivot moves from animation 
     std::vector<MTransformationMatrix> transformationMatrices;
     status = computeWorldTransformPerFrame(transformPath, startFrame, endFrame, transformationMatrices);
     McheckErr(status, "Failed to compute world transforms.");
 
+    // Compute the centroid offset so that we can use this to 
+    // quickly find the centroid based on pivot location 
+    // Centroid is found through average position of vertex positions
+    MVector centroidLocal;
+    status = computeCentroidLocal(shapePath, transformPath, centroidLocal);
+    McheckErr(status, "Failed to calculate centroid offset.");
 
     // Calculate the centroid's positions over time 
     std::vector<MVector> centroidPositions; 
-    status = computeCentroidTrajectory(startFrame, endFrame, transformationMatrices,
-        centroidOffset, centroidPositions);
+    status = computeCentroidTrajectory(startFrame, endFrame, transformationMatrices, centroidLocal, centroidPositions);
     
     // Just passing along centroid velocity for now 
     // No real motion offset calculation yet 
@@ -423,7 +443,7 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     status = computeCentroidVelocity(centroidPositions, centroidVelocities);
     McheckErr(status, "Failed to compute centroid velocity.");
     
-    int numFrames = static_cast<int>(centroidVelocities.size());
+    const int numFrames = static_cast<int>(endFrame - startFrame + 1);
     if (numFrames == 0) {
         MGlobal::displayError("No motion detected.");
         return MS::kFailure;
@@ -447,9 +467,20 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     status = meshFn.getPoints(objectSpaceVertices, MSpace::kObject);
     McheckErr(status, "Smear::computeMotionOffsetsSimple - Failed to get object space vertex positions");
     
+    MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Num Frames frame:" + MString() + numFrames);
+
+    // Store vertex trajectories
+    motionOffsets.vertexTrajectories.resize(numFrames);
+    MPointArray vertices;
+
     // Iterate through each frame to find motion offsets for each frame
     for (int frame = 0; frame < numFrames; ++frame) {
         MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Current frame:" + MString() + frame);
+
+        status = getVerticesAtFrame(shapePath, transformPath, startFrame + frame, vertices);
+        McheckErr(status, "Failed to get world-space vertices");
+
+        motionOffsets.vertexTrajectories[frame] = vertices;
 
         MDoubleArray& currentFrameMotionOffsets = motionOffsets.motionOffsets[frame];
         status = calculatePerFrameMotionOffsets(objectSpaceVertices, transformationMatrices[frame], centroidPositions[frame], centroidVelocities[frame], currentFrameMotionOffsets);

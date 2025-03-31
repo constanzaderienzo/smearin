@@ -23,6 +23,7 @@ public:
     static MObject aEnable;
     static MObject aBetaMax;
     static MObject time;
+    static MObject inputMesh;
 
     SmearDeformerNode() {};
     ~SmearDeformerNode() {};

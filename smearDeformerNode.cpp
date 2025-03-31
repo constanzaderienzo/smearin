@@ -1,10 +1,22 @@
 #include "smearDeformerNode.h"
+#include <maya/MDagPath.h>
 #include <maya/MItGeometry.h>
 #include <maya/MFnUnitAttribute.h>
+#include <maya/MFnTypedAttribute.h>
+#include <maya/MStatus.h>
+#include <maya/MGlobal.h>
 #include <math.h>
+
+#define McheckErr(stat, msg)        \
+    if (MS::kSuccess != stat) {     \
+        MGlobal::displayError(msg); \
+        return MS::kFailure;        \
+    }
+
 
 MTypeId SmearDeformerNode::id(0x98530); // Random id 
 MObject SmearDeformerNode::time;
+MObject SmearDeformerNode::inputMesh;
 
 void* SmearDeformerNode::creator()
 {
@@ -15,7 +27,7 @@ MStatus SmearDeformerNode::initialize()
 {
 
     MFnUnitAttribute unitAttr;
-    //MFnTypedAttribute typedAttr;
+    MFnTypedAttribute typedAttr;
     MStatus status;
 
     // Time attribute
@@ -23,19 +35,55 @@ MStatus SmearDeformerNode::initialize()
     addAttribute(time);
 
     // Input mesh
-    //inputMesh = typedAttr.create("inputMesh", "in", MFnData::kMesh);
-    //typedAttr.setStorable(true);
-    //addAttribute(inputMesh);
+    inputMesh = typedAttr.create("inputMesh", "in", MFnData::kMesh);
+    typedAttr.setStorable(true);
+    addAttribute(inputMesh);
 
     return MS::kSuccess;
 }
 
 MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
 {
-    MTime currentTime = block.inputValue(time).asTime();
+    MStatus status; 
+
+    MDataHandle timeDataHandle = block.inputValue(time, &status); 
+    McheckErr(status, "Failed to obtain data handle from time input"); 
+
+    MTime currentTime = timeDataHandle.asTime();
     double currentFrame = currentTime.as(MTime::kFilm);
-    //const double frame = currentTime.as(MTime::kFilm);
- 
+
+    MArrayDataHandle hInput = block.outputArrayValue(input); 
+    hInput.jumpToArrayElement(multiIndex); 
+
+    MDataHandle hInputGeom = hInput.outputValue().child(inputGeom);
+    MObject oInputGeom = hInputGeom.asMesh(); 
+
+    // Get mesh DAG path
+    MDagPath meshPath;
+    if (!MDagPath::getAPathTo(oInputGeom, meshPath)) {
+        MGlobal::displayError(MString("Failed to get mesh path"));
+        return MS::kFailure;
+    }
+    MGlobal::displayInfo(MString("Mesh path: ") + meshPath.fullPathName());
+
+    // Get transform path (parent of shape node)
+    MDagPath transformPath = meshPath;
+    if (transformPath.pop() != MS::kSuccess) {
+        MGlobal::displayError("Failed to get transform node");
+        return MS::kFailure;
+    }
+    MGlobal::displayInfo(MString("Transform path: ") + transformPath.fullPathName());
+
+    // Check if the provided path point to correct node types.
+    if (!meshPath.hasFn(MFn::kMesh)) {
+        MGlobal::displayError("Smear::calculateCentroidOffsetFromPivot - meshPath does not point to a mesh node.");
+        return MS::kFailure; // Not a mesh node.
+    }
+    else if (!transformPath.hasFn(MFn::kTransform)) {
+        MGlobal::displayError("Smear::calculateCentroidOffsetFromPivot - tranformPath does not point to a transform node.");
+        return MS::kFailure; // Not a transform node.
+    }
+
     MPoint point; 
     for (; !iter.isDone(); iter.next()) {
         const int vertIdx = iter.index();

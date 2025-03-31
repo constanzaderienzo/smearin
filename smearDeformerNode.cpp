@@ -32,14 +32,15 @@ MStatus SmearDeformerNode::initialize()
 
 MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
 {
-    double currentTime = block.inputValue(time).asDouble();
+    MTime currentTime = block.inputValue(time).asTime();
+    double currentFrame = currentTime.as(MTime::kFilm);
     //const double frame = currentTime.as(MTime::kFilm);
  
-    MPoint point;
+    MPoint point; 
     for (; !iter.isDone(); iter.next()) {
         const int vertIdx = iter.index();
         point = iter.position();
-        point += MPoint(2.f, 2.f, 2.f, 0.f) * sin(currentTime);
+        point += MPoint(2.f, 2.f, 2.f, 0.f) * sin(currentFrame);
 
         // Apply to vertex
         iter.setPosition(point);

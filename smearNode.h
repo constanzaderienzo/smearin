@@ -1,5 +1,5 @@
 #pragma once
-#include <maya/MPxDeformerNode.h>
+#include <maya/MPxNode.h>
 #include "smear.h"
 
 /*
@@ -13,7 +13,7 @@
 	connectAttr "SmearNode1.outputMesh" "pCube1.inMesh";
 */
 
-class SmearNode : public MPxDeformerNode
+class SmearNode : public MPxNode
 {
 private: 
 	// Caches motion offsets for simlpe objects. 
@@ -30,17 +30,13 @@ public:
 	static  void* creator();
 	static  MStatus initialize();
 
-	MStatus SmearNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix,unsigned int multiIndex) override;
-	MColor computeColor(double offset);	
-
-	static MPoint catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3,double t);
+	MStatus compute(const MPlug& plug, MDataBlock& data) override;
+	MColor computeColor(double offset);
 
 	static MTypeId id;  // Unique node ID
 	static MObject time; 
-	static MObject inputGeom;  
-	static MObject outputGeom; 
+	static MObject inputMesh;
+	static MObject outputMesh;
 	static MColorArray currentColors; // Used for caching to avoid array reallocation every frame 
-	static MObject betaMax;
-	static MObject enableDeformation;
 };
 

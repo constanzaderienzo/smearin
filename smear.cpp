@@ -209,7 +209,7 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
 }
 
 
-MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const MDagPath& transformPath, MVector& centroidOffset) {
+MStatus Smear::computeCentroidLocal(const MDagPath& shapePath, const MDagPath& transformPath, MVector& centroidLocal) {
     MStatus status;
 
     // Check if the provided path point to correct node types.
@@ -235,26 +235,18 @@ MStatus Smear::calculateCentroidOffsetFromPivot(const MDagPath& shapePath, const
     // Debug: Print vertex positions
     //MGlobal::displayInfo("Vertex positions:");
     for (; !vertexIt.isDone(); vertexIt.next()) {
-        MPoint vertexPos = vertexIt.position(MSpace::kWorld);
+        MPoint vertexPos = vertexIt.position(MSpace::kObject);
         //MGlobal::displayInfo(MString("Vertex ") + vertexIt.index() + ": " + vertexPos.x + ", " + vertexPos.y + ", " + vertexPos.z);
         sum += vertexPos;
     }
 
-    MVector centroid = (numVertices > 0) ? sum / numVertices : MVector(0.0, 0.0, 0.0);
-
-    MPoint pivotPoint = transformPath.inclusiveMatrix()[3]; // Get the translation component of the matrix
-    MVector pivot(pivotPoint.x, pivotPoint.y, pivotPoint.z);
-
-    // Debug: Print the pivot point
-
-    // Calculate the centroid offset
-    centroidOffset = centroid - pivot;
+    centroidLocal = (numVertices > 0) ? sum / numVertices : MVector(0.0, 0.0, 0.0);
 
     return MS::kSuccess;
 }
 
 MStatus Smear::computeCentroidTrajectory(double startFrame, double endFrame, const std::vector<MTransformationMatrix>& transformationMatrices, 
-                                         const MVector& centroidOffset, std::vector<MVector>& centroidPositions) {
+                                         const MVector& centroidLocal, std::vector<MVector>& centroidPositions) {
     MStatus status;
     int numFrames = static_cast<int>(endFrame - startFrame + 1);
     centroidPositions.resize(numFrames);
@@ -262,7 +254,7 @@ MStatus Smear::computeCentroidTrajectory(double startFrame, double endFrame, con
     for (int frame = 0; frame < numFrames; ++frame) {
         // Find how the position of the centroid changes based on the pivot's transformations (how it moves, rotates, scales) 
         // by multiplying the transform to centroid offset 
-        MPoint transformedOffset = MPoint(centroidOffset) * transformationMatrices[frame].asMatrix();
+        MPoint transformedOffset = MPoint(centroidLocal) * transformationMatrices[frame].asMatrix();
 
         centroidPositions[frame] = MVector(transformedOffset);
     }
@@ -429,23 +421,21 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
 
     MGlobal::displayInfo(MString("Start Frame: ") + startFrame + MString("End Frame: ") + endFrame);
 
-    // Compute the centroid offset so that we can use this to 
-    // quickly find the centroid based on pivot location 
-    // Centroid is found through average position of vertex positions
-    MVector centroidOffset;
-    status = calculateCentroidOffsetFromPivot(shapePath, transformPath, centroidOffset);
-    McheckErr(status, "Failed to calculate centroid offset.");
-
     // Parse all the transformations from each frame to see how the pivot moves from animation 
     std::vector<MTransformationMatrix> transformationMatrices;
     status = computeWorldTransformPerFrame(transformPath, startFrame, endFrame, transformationMatrices);
     McheckErr(status, "Failed to compute world transforms.");
 
+    // Compute the centroid offset so that we can use this to 
+    // quickly find the centroid based on pivot location 
+    // Centroid is found through average position of vertex positions
+    MVector centroidLocal;
+    status = computeCentroidLocal(shapePath, transformPath, centroidLocal);
+    McheckErr(status, "Failed to calculate centroid offset.");
 
     // Calculate the centroid's positions over time 
     std::vector<MVector> centroidPositions; 
-    status = computeCentroidTrajectory(startFrame, endFrame, transformationMatrices,
-        centroidOffset, centroidPositions);
+    status = computeCentroidTrajectory(startFrame, endFrame, transformationMatrices, centroidLocal, centroidPositions);
     
     // Just passing along centroid velocity for now 
     // No real motion offset calculation yet 

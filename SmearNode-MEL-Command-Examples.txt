@@ -1,0 +1,11 @@
+SmearNode - MEL Command Examples
+
+// ===== Commands for default sphere setup =====
+createNode SmearNode;
+connectAttr "time1.outTime" "SmearNode1.time";
+connectAttr "pSphere1.outMesh" "SmearNode1.inputMesh";
+
+// Run this one separately after running the 3 lines above
+connectAttr "SmearNode1.outputMesh" "pSphere1.inMesh";
+
+

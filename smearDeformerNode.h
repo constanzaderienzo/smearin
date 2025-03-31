@@ -7,6 +7,12 @@
 #include <vector>
 #include "smear.h"
 
+/*
+* deformer - type "SmearDeformerNode" pCube1;
+* connectAttr "time1.outTime" "SmearDeformerNode1.time";
+*/
+
+
 
 class SmearDeformerNode : public MPxDeformerNode
 {
@@ -16,7 +22,7 @@ public:
     // Attributes
     static MObject aEnable;
     static MObject aBetaMax;
-    static MObject aTime;
+    static MObject time;
 
     SmearDeformerNode() {};
     ~SmearDeformerNode() {};
@@ -31,12 +37,12 @@ public:
         const MMatrix& localToWorldMatrix,
         unsigned int multiIndex) override;
 
-private:
-
     // Precomputed animation data
     MotionOffsetsSimple motionOffsets;
     // Tracks whether motion offsets are baked to avoid recomputation of offsets every frame
     bool motionOffsetsBaked;
+
+private:
 
     // Interpolation helper
     MPoint catmullRomInterpolate(const MPoint& p0, const MPoint& p1,

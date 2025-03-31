@@ -130,58 +130,83 @@ bool compareTransformComponents(MTransformationMatrix::RotationOrder rotOrder, c
 
 MStatus Smear::cacheInclusiveTransforms(
     const MDagPath& transformPath,
-    double startFrame,
-    double endFrame,
-    std::vector<MMatrix>& inclusiveTransforms)
-{
+    const double startFrame,
+    const double endFrame,
+    std::vector<MTransformationMatrix>& transformationMatrices) {
     MStatus status;
 
-    // Sanity check
     if (!transformPath.hasFn(MFn::kTransform)) {
-        MGlobal::displayError("Smear::cacheInclusiveTransforms - transformPath is not a transform node.");
+        MGlobal::displayError("Smear::computeWorldTransformPerFrame - transformPath is not a transform node.");
         return MS::kFailure;
     }
 
-    // Figure out how many frames we need to sample
-    const int numFrames = static_cast<int>(endFrame - startFrame + 1);
-    if (numFrames <= 0) {
-        MGlobal::displayWarning("No frames to sample.");
-        return MS::kSuccess;
+    MFnDependencyNode depNode(transformPath.node(), &status);
+    McheckErr(status, "Failed to create MFnDependencyNode");
+
+    auto numFrames = static_cast<int>(endFrame - startFrame + 1);
+    transformationMatrices.resize(numFrames);
+
+    // Get the transform's rotation order
+    MFnTransform fnTransform(transformPath.node(), &status);
+    McheckErr(status, "Failed to get MFnTransform");
+
+    MTransformationMatrix::RotationOrder rotOrder = fnTransform.rotationOrder();
+
+    for (int frame = 0; frame < numFrames; ++frame) {
+        MTime currentTime(startFrame + frame, MTime::uiUnit());
+        MDGContext context(currentTime);
+
+        // Get plugs for transform attributes
+        MPlug translatePlug = depNode.findPlug("translate", true);
+        MPlug rotatePlug = depNode.findPlug("rotate", true);
+        MPlug scalePlug = depNode.findPlug("scale", true);
+
+        // Evaluate plugs at this time
+        MVector translation(
+            translatePlug.child(0).asDouble(context),
+            translatePlug.child(1).asDouble(context),
+            translatePlug.child(2).asDouble(context));
+
+        double rotation[3] = {
+            rotatePlug.child(0).asDouble(context),
+            rotatePlug.child(1).asDouble(context),
+            rotatePlug.child(2).asDouble(context) };
+
+        double scale[3] = {
+            scalePlug.child(0).asDouble(context),
+            scalePlug.child(1).asDouble(context),
+            scalePlug.child(2).asDouble(context) };
+
+        // Build transform matrix manually
+        MTransformationMatrix xform;
+        xform.setTranslation(translation, MSpace::kTransform);
+        xform.setRotation(rotation, rotOrder);
+        xform.setScale(scale, MSpace::kTransform);
+        transformationMatrices[frame] = xform;
+
+        // Debug print
+
+        //MString msg = MString() + "Frame " + frame + ":\n"
+        //+ "  Translation = (" +
+        //    translation.x + ", " +
+        //    translation.y + ", " +
+        //    translation.z + ")\n"
+
+        //+ "  Rotation (XYZ degrees) = (" +
+        //    rotation[0] + ", " +
+        //    rotation[1] + ", " +
+        //    rotation[2] + ")\n"
+
+        //+ "  Scale = (" +
+        //    scale[0] + ", " +
+        //    scale[1] + ", " +
+        //    scale[2] + ")";
+        //MGlobal::displayInfo(msg);
+
     }
-    inclusiveTransforms.resize(numFrames);
-
-    // Save the current scene time to restore later
-    MTime oldTime = MAnimControl::currentTime();
-
-    // For each frame, set the scene time and grab the inclusive matrix
-    for (int i = 0; i < numFrames; ++i) {
-        double frameTime = startFrame + i;
-
-        // Set the global Maya time to this frame
-        MTime currentTime(frameTime, MTime::uiUnit());
-        MAnimControl::setCurrentTime(currentTime);
-
-        // Now, query the inclusive matrix from the transformPath
-        MMatrix incMat = transformPath.inclusiveMatrix(&status);
-        if (!status) {
-            MGlobal::displayError(MString() + "Failed to get inclusiveMatrix for frame " + frameTime);
-            continue;
-        }
-
-        // Store as an MTransformationMatrix for convenience
-        inclusiveTransforms[i] = incMat; 
-
-        // Optional: debug print
-        // MGlobal::displayInfo(MString() + "Frame: " + frameTime + 
-        //                     ", incMat: " + matrixToString(incMat) );
-    }
-
-    // Restore original scene time
-    MAnimControl::setCurrentTime(oldTime);
 
     return MS::kSuccess;
 }
-
 
 
 MStatus Smear::computeCentroidLocal(const MDagPath& shapePath, const MDagPath& transformPath, MVector & centroidLocal) {

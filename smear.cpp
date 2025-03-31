@@ -374,12 +374,7 @@ MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& tra
 
     MMatrix worldMatrix = matrixFn.matrix();
 
-    // 7. Debug: Print matrix translation
-    MVector translation(worldMatrix[3][0], worldMatrix[3][1], worldMatrix[3][2]);
-    MGlobal::displayInfo(MString("World Matrix Translation: ") +
-        translation.x + ", " + translation.y + ", " + translation.z);
-
-    // 8. Get object-space vertices in context
+    // 7. Get object-space vertices in context
     MFnDependencyNode shapeNode(shapePath.node());
     MPlug outMeshPlug = shapeNode.findPlug("outMesh", true, &status);
     McheckErr(status, "Failed to find outMesh plug");
@@ -391,7 +386,7 @@ MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& tra
         return MS::kFailure;
     }
 
-    // 9. Get object-space vertices
+    // 8. Get object-space vertices
     MFnMesh meshFn(meshData, &status);
     McheckErr(status, "Failed to create MFnMesh")
 
@@ -399,7 +394,7 @@ MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& tra
     status = meshFn.getPoints(objSpaceVerts, MSpace::kObject);
     McheckErr(status, "Failed to get object-space vertices");
 
-    // 10. Transform to world space
+    // 9. Transform to world space
     vertices.setLength(objSpaceVerts.length());
     for (unsigned int i = 0; i < objSpaceVerts.length(); ++i) {
         vertices[i] = objSpaceVerts[i] * worldMatrix;

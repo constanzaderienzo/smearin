@@ -5,6 +5,8 @@
 #include <maya/MFnTransform.h>
 #include <maya/MFnMesh.h>
 #include <maya/MVectorArray.h>
+#include <maya/MPointArray.h>
+#include <maya/MDoubleArray.h>
 
 using std::cout;
 using std::endl;

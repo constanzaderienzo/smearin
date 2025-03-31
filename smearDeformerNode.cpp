@@ -1,6 +1,8 @@
 #include "smearDeformerNode.h"
 #include <maya/MItGeometry.h>
 
+MTypeId SmearDeformerNode::id(0x98530); // Random id 
+
 void* SmearDeformerNode::creator()
 {
     return new SmearDeformerNode();

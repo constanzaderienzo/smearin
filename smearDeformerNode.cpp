@@ -93,6 +93,9 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
 
     int frameIndex = static_cast<int>(currentFrame - motionOffsets.startFrame);
     
+    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
+        return MS::kSuccess; // Skip invalid frames
+    }
     const MDoubleArray& offsets = motionOffsets.motionOffsets[frameIndex];
     const std::vector<MPointArray>& trajectories = motionOffsets.vertexTrajectories;
     const int numFrames = trajectories.size();
@@ -100,39 +103,34 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     MPoint point; 
     for (; !iter.isDone(); iter.next()) {
         const int vertIdx = iter.index();
-        MVector normal = iter.normal(); 
-        point = iter.position(); 
 
         if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
-            point += MPoint(0.f, 0.f, 0.f, 0.f); 
-        }
-        else {
-            // Calculate interpolation parameters
-            double offset = offsets[vertIdx];
-            const double beta = offsets[vertIdx] * 0.5 * 2.0;
-            const int baseFrame = frameIndex + static_cast<int>(floor(beta));
-            const double t = beta - floor(beta);
-
-            // Clamp frame indices
-            const int f0 = std::max(0, baseFrame - 1);
-            const int f1 = std::max(0, std::min(numFrames - 1, baseFrame));
-            const int f2 = std::min(numFrames - 1, baseFrame + 1);
-            const int f3 = std::min(numFrames - 1, baseFrame + 2);
-
-            // Get trajectory points
-            const MPoint& p0 = trajectories[f0][vertIdx];
-            const MPoint& p1 = trajectories[f1][vertIdx];
-            const MPoint& p2 = trajectories[f2][vertIdx];
-            const MPoint& p3 = trajectories[f3][vertIdx];
-
-            // Calculate new position
-            point = iter.position();
-            MPoint interpolated = SmearDeformerNode::catmullRomInterpolate(p0, p1, p2, p3, t);
-            point += interpolated - p1;
+            continue;
         }
 
-        // Apply to vertex
-        iter.setPosition(point);
+        // Get motion offset and apply strength
+        double offset = offsets[vertIdx];
+        const double beta = offset * 1.5;
+
+        const int frameOffset = static_cast<int>(floor(beta));
+        const double t = beta - frameOffset;
+
+        const int baseFrame = frameIndex + frameOffset;
+        // Clamp frame indices
+        const int f0 = std::max(0, std::min(numFrames - 1, baseFrame - 1));
+        const int f1 = std::max(0, std::min(numFrames - 1, baseFrame));
+        const int f2 = std::max(0, std::min(numFrames - 1, baseFrame + 1));
+        const int f3 = std::max(0, std::min(numFrames - 1, baseFrame + 2));
+
+        // Get trajectory points
+        const MPoint& p0 = trajectories[f0][vertIdx];
+        const MPoint& p1 = trajectories[f1][vertIdx];
+        const MPoint& p2 = trajectories[f2][vertIdx];
+        const MPoint& p3 = trajectories[f3][vertIdx];
+
+        MPoint interpolated = SmearDeformerNode::catmullRomInterpolate(p0, p1, p2, p3, t);
+
+        iter.setPosition(interpolated);
     }
     return MS::kSuccess();
 }

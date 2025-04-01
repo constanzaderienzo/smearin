@@ -93,15 +93,20 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     }
 
     int frameIndex = static_cast<int>(currentFrame - motionOffsets.startFrame);
-    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
-        return MS::kSuccess;
-    }
+    
 
     MPoint point; 
     for (; !iter.isDone(); iter.next()) {
         const int vertIdx = iter.index();
         MVector normal = iter.normal(); 
-        point = iter.position() + motionOffsets.motionOffsets[currentFrame][vertIdx] * normal;
+        point = iter.position(); 
+
+        if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
+            point += MPoint(0.f, 0.f, 0.f, 0.f); 
+        }
+        else {
+            point += motionOffsets.motionOffsets[frameIndex][vertIdx] * normal;
+        }
 
         // Apply to vertex
         iter.setPosition(point);

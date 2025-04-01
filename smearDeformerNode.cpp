@@ -3,6 +3,7 @@
 #include <maya/MItGeometry.h>
 #include <maya/MFnUnitAttribute.h>
 #include <maya/MFnTypedAttribute.h>
+#include <maya/MFnNumericAttribute.h>
 #include <maya/MStatus.h>
 #include <maya/MGlobal.h>
 #include <maya/MDagPathArray.h>
@@ -20,6 +21,10 @@
 
 MTypeId SmearDeformerNode::id(0x98530); // Random id 
 MObject SmearDeformerNode::time;
+MObject SmearDeformerNode::smoothWindowSize;
+MObject SmearDeformerNode::smoothEnabled;
+MObject SmearDeformerNode::aStrength;
+
 
 SmearDeformerNode::SmearDeformerNode():
     motionOffsets(), motionOffsetsBaked(false)
@@ -35,7 +40,7 @@ void* SmearDeformerNode::creator()
 
 MStatus SmearDeformerNode::initialize()
 {
-
+    MFnNumericAttribute numAttr;
     MFnUnitAttribute unitAttr;
     MFnTypedAttribute typedAttr;
     MStatus status;
@@ -43,6 +48,19 @@ MStatus SmearDeformerNode::initialize()
     // Time attribute
     time = unitAttr.create("time", "tm", MFnUnitAttribute::kTime, 0.0);
     addAttribute(time);
+
+    smoothEnabled = numAttr.create("smoothEnabled", "smenb", MFnNumericData::kBoolean, true);
+    addAttribute(smoothEnabled);
+
+    smoothWindowSize = numAttr.create("smoothWindow", "smwin", MFnNumericData::kInt, 2);
+    numAttr.setMin(0);
+    numAttr.setMax(5);
+    addAttribute(smoothWindowSize);
+
+    aStrength = numAttr.create("strength", "s", MFnNumericData::kDouble, 1.5);
+    numAttr.setMin(0);
+    numAttr.setMax(5);
+    addAttribute(aStrength);
     
     return MS::kSuccess;
 }
@@ -100,6 +118,36 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     const std::vector<MPointArray>& trajectories = motionOffsets.vertexTrajectories;
     const int numFrames = trajectories.size();
 
+    const bool smoothingEnabled = block.inputValue(smoothEnabled).asBool();
+    const int N = smoothingEnabled ? block.inputValue(smoothWindowSize).asInt() : 0;
+    std::vector<double> smoothedOffsets(offsets.length(), 0.0);
+
+    // Precompute smoothed offsets for all vertices
+    for (int vertIdx = 0; vertIdx < offsets.length(); ++vertIdx) {
+        double totalWeight = 0.0;
+        double smoothed = 0.0;
+
+        for (int n = -N; n <= N; ++n) {
+            const int frame = frameIndex + n;
+
+            // Skip out-of-bounds frames
+            if (frame < 0 || frame >= motionOffsets.motionOffsets.size()) continue;
+
+            // Calculate weight
+            const double normalized = std::abs(n) / static_cast<double>(N + 1);
+            const double weight = std::pow(1.0 - std::pow(normalized, 2.0), 2.0);
+
+            smoothed += motionOffsets.motionOffsets[frame][vertIdx] * weight;
+            totalWeight += weight;
+        }
+
+        // Store final smoothed offset
+        smoothedOffsets[vertIdx] = totalWeight > 0.0 ? smoothed / totalWeight : offsets[vertIdx];
+    }
+
+    // Artistic control param
+    const double strength = block.inputValue(aStrength).asDouble();
+
     MPoint point; 
     for (; !iter.isDone(); iter.next()) {
         const int vertIdx = iter.index();
@@ -109,8 +157,8 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
         }
 
         // Get motion offset and apply strength
-        double offset = offsets[vertIdx];
-        const double beta = offset * 1.5;
+        double offset = smoothedOffsets[vertIdx];
+        const double beta = offset * strength;
 
         const int frameOffset = static_cast<int>(floor(beta));
         const double t = beta - frameOffset;
@@ -149,75 +197,3 @@ MPoint SmearDeformerNode::catmullRomInterpolate(const MPoint& p0, const MPoint& 
     // Combine control points
     return p0 * a0 + p1 * a1 + p2 * a2 + p3 * a3;
 }
-
-//MStatus SmearDeformerNode::deform(MDataBlock& block,
-//    MItGeometry& iter,
-//    const MMatrix& localToWorldMatrix,
-//    unsigned int multiIndex)
-//{
-//    MStatus status;
-//
-//    // 1. Get deformation parameters
-//    const bool enableDef = true; /*block.inputValue(aEnable).asBool();*/
-//    const double betaMaxVal = 0.5f;/*block.inputValue(aBetaMax).asDouble();*/
-//    if (!enableDef || !motionOffsetsBaked) return MS::kSuccess;
-//
-//    // 2. Get current frame and validate
-//    MTime currentTime = block.inputValue(aTime).asTime();
-//    const double frame = currentTime.as(MTime::kFilm);
-//    const int frameIndex = static_cast<int>(frame - motionOffsets.startFrame);
-//
-//    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
-//        return MS::kSuccess;
-//    }
-//
-//    // 3. Get trajectory data
-//    //const MDoubleArray& offsets = motionOffsets.motionOffsets[frameIndex];
-//    //const std::vector<MPointArray>& trajectories = motionOffsets.vertexTrajectories;
-//    //const int numFrames = trajectories.size();
-//
-//    // 4. Get weight data
-//    //MStatus returnStatus;
-//    //MDataHandle chunkEnvelopeData = block.inputValue(smearWeight, &returnStatus);
-//    //float chunkWeight = chunkEnvelopeData.asFloat();
-//
-//    //MArrayDataHandle hInput = block.outputArrayValue(input);
-//    //hInput.jumpToElement(multiIndex);
-//    //const float weight = weightValue(block, multiIndex, iter.index());
-//    const float weight = 2.0;
-//
-//    // 5. Deformation loop
-//    MPoint point;
-//    for (; !iter.isDone(); iter.next()) {
-//        const int vertIdx = iter.index();
-//
-//        // Skip if no offset data or weight is zero
-//        if (vertIdx >= offsets.length() || weight <= 0.0001f) continue;
-//
-//        // Calculate interpolation parameters
-//        const double beta = offsets[vertIdx] * betaMaxVal * weight;
-//        const int baseFrame = frameIndex + static_cast<int>(floor(beta));
-//        const double t = beta - floor(beta);
-//
-//        // Clamp frame indices
-//        const int f0 = std::max(0, baseFrame - 1);
-//        const int f1 = std::max(0, std::min(numFrames - 1, baseFrame));
-//        const int f2 = std::min(numFrames - 1, baseFrame + 1);
-//        const int f3 = std::min(numFrames - 1, baseFrame + 2);
-//
-//        // Get trajectory points
-//        const MPoint& p0 = trajectories[f0][vertIdx];
-//        const MPoint& p1 = trajectories[f1][vertIdx];
-//        const MPoint& p2 = trajectories[f2][vertIdx];
-//        const MPoint& p3 = trajectories[f3][vertIdx];
-//
-//        // Calculate new position
-//        point = iter.position();
-//        point += SmearDeformerNode::catmullRomInterpolate(p0, p1, p2, p3, t) - p1;
-//
-//        // Apply to vertex
-//        iter.setPosition(point);
-//    }
-//
-//    return MS::kSuccess;
-//}

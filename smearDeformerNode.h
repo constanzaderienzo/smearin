@@ -21,9 +21,10 @@ public:
     
 
     // Attributes
-    static MObject aEnable;
-    static MObject aBetaMax;
     static MObject time;
+    static MObject smoothWindowSize;
+    static MObject smoothEnabled;
+    static MObject aStrength;
 
     SmearDeformerNode();
     ~SmearDeformerNode();

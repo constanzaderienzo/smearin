@@ -8,6 +8,8 @@
 #include <maya/MDagPathArray.h>
 #include <maya/MFnDependencyNode.h>
 #include <math.h>
+#include <maya/MPoint.h>
+
 
 #define McheckErr(stat, msg)        \
     if (MS::kSuccess != stat) {     \
@@ -91,6 +93,9 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
 
     int frameIndex = static_cast<int>(currentFrame - motionOffsets.startFrame);
     
+    const MDoubleArray& offsets = motionOffsets.motionOffsets[frameIndex];
+    const std::vector<MPointArray>& trajectories = motionOffsets.vertexTrajectories;
+    const int numFrames = trajectories.size();
 
     MPoint point; 
     for (; !iter.isDone(); iter.next()) {
@@ -102,13 +107,49 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
             point += MPoint(0.f, 0.f, 0.f, 0.f); 
         }
         else {
-            point += motionOffsets.motionOffsets[frameIndex][vertIdx] * normal;
+            // Calculate interpolation parameters
+            double offset = offsets[vertIdx];
+            const double beta = offsets[vertIdx] * 0.5 * 2.0;
+            const int baseFrame = frameIndex + static_cast<int>(floor(beta));
+            const double t = beta - floor(beta);
+
+            // Clamp frame indices
+            const int f0 = std::max(0, baseFrame - 1);
+            const int f1 = std::max(0, std::min(numFrames - 1, baseFrame));
+            const int f2 = std::min(numFrames - 1, baseFrame + 1);
+            const int f3 = std::min(numFrames - 1, baseFrame + 2);
+
+            // Get trajectory points
+            const MPoint& p0 = trajectories[f0][vertIdx];
+            const MPoint& p1 = trajectories[f1][vertIdx];
+            const MPoint& p2 = trajectories[f2][vertIdx];
+            const MPoint& p3 = trajectories[f3][vertIdx];
+
+            // Calculate new position
+            point = iter.position();
+            MPoint interpolated = SmearDeformerNode::catmullRomInterpolate(p0, p1, p2, p3, t);
+            point += interpolated - p1;
         }
 
         // Apply to vertex
         iter.setPosition(point);
     }
     return MS::kSuccess();
+}
+
+MPoint SmearDeformerNode::catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t) {
+    // SMEAR paper uses standard Catmull-Rom interpolation (Section 4.1)
+    const float t2 = t * t;
+    const float t3 = t2 * t;
+
+    // Basis matrix coefficients (as per original Catmull-Rom formulation)
+    const float a0 = -0.5f * t3 + t2 - 0.5f * t;
+    const float a1 = 1.5f * t3 - 2.5f * t2 + 1.0f;
+    const float a2 = -1.5f * t3 + 2.0f * t2 + 0.5f * t;
+    const float a3 = 0.5f * t3 - 0.5f * t2;
+
+    // Combine control points
+    return p0 * a0 + p1 * a1 + p2 * a2 + p3 * a3;
 }
 
 //MStatus SmearDeformerNode::deform(MDataBlock& block,

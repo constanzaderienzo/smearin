@@ -43,7 +43,5 @@ private:
     bool motionOffsetsBaked;
 
     // Interpolation helper
-    MPoint catmullRomInterpolate(const MPoint& p0, const MPoint& p1,
-        const MPoint& p2, const MPoint& p3,
-        double t) const;
+    MPoint catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t);
 };

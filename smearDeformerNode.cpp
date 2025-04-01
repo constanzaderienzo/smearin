@@ -20,6 +20,12 @@ MTypeId SmearDeformerNode::id(0x98530); // Random id
 MObject SmearDeformerNode::time;
 MObject SmearDeformerNode::inputMesh;
 
+SmearDeformerNode::SmearDeformerNode():
+{}
+
+SmearDeformerNode::~SmearDeformerNode()
+{}
+
 void* SmearDeformerNode::creator()
 {
     return new SmearDeformerNode();
@@ -40,7 +46,7 @@ MStatus SmearDeformerNode::initialize()
     inputMesh = typedAttr.create("inputMesh", "in", MFnData::kMesh);
     typedAttr.setStorable(true);
     addAttribute(inputMesh);
-
+    
     return MS::kSuccess;
 }
 
@@ -78,16 +84,28 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
         return MS::kFailure; // Not a transform node.
     }
 
+    // +++ Compute motion offsets using Smear functions +++
+    if (!motionOffsetsBaked) {
+        status = Smear::computeMotionOffsetsSimple(meshPath, transformPath, motionOffsets);
+        McheckErr(status, "Failed to compute motion offsets");
+        motionOffsetsBaked = true;
+    }
+
+    int frameIndex = static_cast<int>(currentFrame - motionOffsets.startFrame);
+    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
+        return MS::kSuccess;
+    }
+
     MPoint point; 
     for (; !iter.isDone(); iter.next()) {
         const int vertIdx = iter.index();
-        point = iter.position();
-        point += MPoint(2.f, 2.f, 2.f, 0.f) * sin(currentFrame);
+        MVector normal = iter.normal(); 
+        point = iter.position() + motionOffsets.motionOffsets[currentFrame][vertIdx] * normal;
 
         // Apply to vertex
         iter.setPosition(point);
     }
-    return MStatus();
+    return MS::kSuccess();
 }
 
 //MStatus SmearDeformerNode::deform(MDataBlock& block,

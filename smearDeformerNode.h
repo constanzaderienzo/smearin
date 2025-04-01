@@ -19,6 +19,7 @@ class SmearDeformerNode : public MPxDeformerNode
 {
 public:
     static MTypeId id;
+    
 
     // Attributes
     static MObject aEnable;
@@ -26,8 +27,8 @@ public:
     static MObject time;
     static MObject inputMesh;
 
-    SmearDeformerNode() {};
-    ~SmearDeformerNode() {};
+    SmearDeformerNode();
+    ~SmearDeformerNode();
     
     // Node lifecycle
     static void* creator();
@@ -39,12 +40,9 @@ public:
         const MMatrix& localToWorldMatrix,
         unsigned int multiIndex) override;
 
-    // Precomputed animation data
-    MotionOffsetsSimple motionOffsets;
-    // Tracks whether motion offsets are baked to avoid recomputation of offsets every frame
-    bool motionOffsetsBaked;
-
 private:
+    MotionOffsetsSimple motionOffsets;
+    bool motionOffsetsBaked;
 
     // Interpolation helper
     MPoint catmullRomInterpolate(const MPoint& p0, const MPoint& p1,

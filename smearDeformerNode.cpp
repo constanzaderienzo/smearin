@@ -18,7 +18,6 @@
 
 MTypeId SmearDeformerNode::id(0x98530); // Random id 
 MObject SmearDeformerNode::time;
-MObject SmearDeformerNode::inputMesh;
 
 SmearDeformerNode::SmearDeformerNode():
     motionOffsets(), motionOffsetsBaked(false)
@@ -42,11 +41,6 @@ MStatus SmearDeformerNode::initialize()
     // Time attribute
     time = unitAttr.create("time", "tm", MFnUnitAttribute::kTime, 0.0);
     addAttribute(time);
-
-    // Input mesh
-    inputMesh = typedAttr.create("inputMesh", "in", MFnData::kMesh);
-    typedAttr.setStorable(true);
-    addAttribute(inputMesh);
     
     return MS::kSuccess;
 }
@@ -60,17 +54,20 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
 
     MTime currentTime = timeDataHandle.asTime();
     double currentFrame = currentTime.as(MTime::kFilm);
-
-    MDataHandle hInputMesh = block.inputValue(inputMesh, &status);
-    McheckErr(status, "Failed to obtain data handle for inputMesh input")
-    MObject oInputMesh = hInputMesh.asMesh();
-
+    
     // Get mesh and transform DAG path
     MFnDependencyNode thisNodeFn(thisMObject());
     MObject thisNode = thisMObject();
-    MPlug inputPlug = thisNodeFn.findPlug(inputMesh, true);
+    MPlug inputPlug(thisMObject(), input);
+    inputPlug = inputPlug.elementByLogicalIndex(0).child(inputGeom);
+
+    MObject meshObj;
+    inputPlug.getValue(meshObj);
+    McheckErr(status, "Failed to get mesh object");
+    
+    //MPlug inputPlug = thisNodeFn.findPlug(inputMesh, true);
     MDagPath meshPath, transformPath;
-    status = Smear::getDagPathsFromInputMesh(oInputMesh, inputPlug, transformPath, meshPath);
+    status = Smear::getDagPathsFromInputMesh(meshObj, inputPlug, transformPath, meshPath);
 
     MGlobal::displayInfo(MString("Mesh path: ") + meshPath.fullPathName());
     MGlobal::displayInfo(MString("Transform path: ") + transformPath.fullPathName());
@@ -78,11 +75,11 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     // Check if the provided path point to correct node types.
     if (!meshPath.hasFn(MFn::kMesh)) {
         MGlobal::displayError("Smear::calculateCentroidOffsetFromPivot - meshPath does not point to a mesh node.");
-        return MS::kFailure; // Not a mesh node.
+        //return MS::kFailure; // Not a mesh node.
     }
     else if (!transformPath.hasFn(MFn::kTransform)) {
         MGlobal::displayError("Smear::calculateCentroidOffsetFromPivot - tranformPath does not point to a transform node.");
-        return MS::kFailure; // Not a transform node.
+        //return MS::kFailure; // Not a transform node.
     }
 
     // +++ Compute motion offsets using Smear functions +++

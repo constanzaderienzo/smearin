@@ -10,7 +10,6 @@
 /*
 deformer - type "SmearDeformerNode" pSphere1;
 connectAttr "time1.outTime" "SmearDeformerNode1.time";
-connectAttr "pSphere1.outMesh" "SmearDeformerNode1.inputMesh" 
 */
 
 
@@ -25,7 +24,6 @@ public:
     static MObject aEnable;
     static MObject aBetaMax;
     static MObject time;
-    static MObject inputMesh;
 
     SmearDeformerNode();
     ~SmearDeformerNode();

@@ -30,45 +30,6 @@ MObject SmearNode::time;
 MObject SmearNode::inputMesh;
 MObject SmearNode::outputMesh;
 
-MStatus SmearNode::getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug & inputMeshPlug, MDagPath & transformPath, MDagPath & shapePath) const
-{
-    MStatus status;
-
-    // Get the plug's source connection
-    MPlugArray connectedPlugs;
-    if (!inputMeshPlug.connectedTo(connectedPlugs, true, false) || connectedPlugs.length() == 0) {
-        MGlobal::displayError("inputMesh is not connected to any mesh.");
-        return MS::kFailure;
-    }
-
-    MPlug sourcePlug = connectedPlugs[0];
-    MObject sourceNode = sourcePlug.node();
-
-    // Get DAG path to that source node (should be a mesh shape)
-    MDagPath dagPath;
-    status = MDagPath::getAPathTo(sourceNode, dagPath);
-    if (!status) {
-        MGlobal::displayError("Failed to get MDagPath from connected source node.");
-        return status;
-    }
-
-    if (dagPath.node().hasFn(MFn::kMesh)) {
-        shapePath = dagPath;
-        status = dagPath.pop();
-        if (!status || !dagPath.node().hasFn(MFn::kTransform)) {
-            MGlobal::displayError("Failed to get transform from mesh shape.");
-            return MS::kFailure;
-        }
-        transformPath = dagPath;
-    }
-    else {
-        MGlobal::displayError("Source node is not a mesh shape.");
-        return MS::kFailure;
-    }
-    return MS::kSuccess;
-}
-
-
 SmearNode::SmearNode():
     motionOffsetsSimple(), motionOffsetsBaked(false) 
 {}
@@ -144,7 +105,7 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     MPlug inputPlug = thisNodeFn.findPlug(inputMesh, true);
 
     MDagPath shapePath, transformPath;
-    status = getDagPathsFromInputMesh(inputObj, inputPlug, transformPath, shapePath);
+    status = Smear::getDagPathsFromInputMesh(inputObj, inputPlug, transformPath, shapePath);
     McheckErr(status, "Failed to tranform path and shape path from input object");
     
     // Cast copied Mesh into MfnMesh

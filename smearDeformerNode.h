@@ -8,8 +8,9 @@
 #include "smear.h"
 
 /*
-deformer - type "SmearDeformerNode" pCube1;
+deformer - type "SmearDeformerNode" pSphere1;
 connectAttr "time1.outTime" "SmearDeformerNode1.time";
+connectAttr "pSphere1.outMesh" "SmearDeformerNode1.inputMesh" 
 */
 
 

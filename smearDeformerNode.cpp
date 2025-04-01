@@ -5,6 +5,8 @@
 #include <maya/MFnTypedAttribute.h>
 #include <maya/MStatus.h>
 #include <maya/MGlobal.h>
+#include <maya/MDagPathArray.h>
+#include <maya/MFnDependencyNode.h>
 #include <math.h>
 
 #define McheckErr(stat, msg)        \
@@ -47,31 +49,23 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     MStatus status; 
 
     MDataHandle timeDataHandle = block.inputValue(time, &status); 
-    McheckErr(status, "Failed to obtain data handle from time input"); 
+    McheckErr(status, "Failed to obtain data handle for time input"); 
 
     MTime currentTime = timeDataHandle.asTime();
     double currentFrame = currentTime.as(MTime::kFilm);
 
-    MArrayDataHandle hInput = block.outputArrayValue(input); 
-    hInput.jumpToArrayElement(multiIndex); 
+    MDataHandle hInputMesh = block.inputValue(inputMesh, &status);
+    McheckErr(status, "Failed to obtain data handle for inputMesh input")
+    MObject oInputMesh = hInputMesh.asMesh();
 
-    MDataHandle hInputGeom = hInput.outputValue().child(inputGeom);
-    MObject oInputGeom = hInputGeom.asMesh(); 
+    // Get mesh and transform DAG path
+    MFnDependencyNode thisNodeFn(thisMObject());
+    MObject thisNode = thisMObject();
+    MPlug inputPlug = thisNodeFn.findPlug(inputMesh, true);
+    MDagPath meshPath, transformPath;
+    status = Smear::getDagPathsFromInputMesh(oInputMesh, inputPlug, transformPath, meshPath);
 
-    // Get mesh DAG path
-    MDagPath meshPath;
-    if (!MDagPath::getAPathTo(oInputGeom, meshPath)) {
-        MGlobal::displayError(MString("Failed to get mesh path"));
-        return MS::kFailure;
-    }
     MGlobal::displayInfo(MString("Mesh path: ") + meshPath.fullPathName());
-
-    // Get transform path (parent of shape node)
-    MDagPath transformPath = meshPath;
-    if (transformPath.pop() != MS::kSuccess) {
-        MGlobal::displayError("Failed to get transform node");
-        return MS::kFailure;
-    }
     MGlobal::displayInfo(MString("Transform path: ") + transformPath.fullPathName());
 
     // Check if the provided path point to correct node types.

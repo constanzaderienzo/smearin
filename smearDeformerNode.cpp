@@ -21,6 +21,7 @@ MObject SmearDeformerNode::time;
 MObject SmearDeformerNode::inputMesh;
 
 SmearDeformerNode::SmearDeformerNode():
+    motionOffsets(), motionOffsetsBaked(false)
 {}
 
 SmearDeformerNode::~SmearDeformerNode()

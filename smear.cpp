@@ -433,6 +433,17 @@ MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& tra
     return MS::kSuccess;
 }
 
+MStatus Smear::computeU(const MVector& vertexPos, const MVector& jointRootPos, const MVector& boneVector, double& u)
+{
+    // Project vertex pos relative to joint root along the bone vector
+    double x = (vertexPos - jointRootPos) * boneVector / boneVector.length();
+
+    // Smoothstep the projected vertex pos 
+    u = (3 * pow(x, 2) - 2 * pow(x, 3)); 
+
+    return MStatus::kSuccess;
+}
+
 MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagPath& transformPath, MotionOffsetsSimple& motionOffsets) {
     MStatus status;
     

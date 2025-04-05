@@ -31,6 +31,7 @@ private:
     static MStatus computeSignedDistanceToPlane(const MPoint& point, const MPoint& pointOnPlane, const MVector& planeNormal, double& signedDist);
     static MStatus calculatePerFrameMotionOffsets(const MPointArray& vertexPositions, const MTransformationMatrix& transformationMatrix, const MPoint& centroid, const MVector& centroidVelocity, MDoubleArray& motionOffsets);
     static MStatus getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& transformPath, double frame, MPointArray& vertices);
+    static MStatus computeU(const MVector& vertexPos, const MVector& jointRootPos, const MVector& boneVector, double& u);
 public:
     static MStatus computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagPath& transformPath, MotionOffsetsSimple& motionOffsets);
     static MStatus extractAnimationFrameRange(const MDagPath& transformPath, double& startFrame, double& endFrame);

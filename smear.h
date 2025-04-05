@@ -5,6 +5,8 @@
 #include <maya/MFnTransform.h>
 #include <maya/MFnMesh.h>
 #include <maya/MVectorArray.h>
+#include <maya/MPointArray.h>
+#include <maya/MDoubleArray.h>
 
 using std::cout;
 using std::endl;
@@ -32,4 +34,5 @@ private:
 public:
     static MStatus computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagPath& transformPath, MotionOffsetsSimple& motionOffsets);
     static MStatus extractAnimationFrameRange(const MDagPath& transformPath, double& startFrame, double& endFrame);
+    static MStatus getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug& inputMeshPlug, MDagPath& transformPath, MDagPath& shapePath);
 };

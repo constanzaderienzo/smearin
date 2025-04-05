@@ -11,6 +11,7 @@
 #include <cstdlib> // for rand()
 #include "smear.h"
 #include "smearNode.h"
+#include "smearDeformerNode.h"
 
 class PluginMain : public MPxCommand {
 private: 
@@ -44,13 +45,30 @@ MStatus initializePlugin(MObject obj) {
     MStatus   status = MStatus::kSuccess;
     MFnPlugin plugin(obj, "SMEARin", "1.0", "Any");
 
-    status = plugin.registerNode("SmearNode", SmearNode::id,
-        SmearNode::creator, SmearNode::initialize);
+    status = plugin.registerNode(
+        "SmearNode", 
+        SmearNode::id,
+        SmearNode::creator, 
+        SmearNode::initialize);
 
     if (!status) {
-        status.perror("registerNode");  
+        status.perror("registerNode SmearNode");  
         return status;
     }
+
+    status = plugin.registerNode(
+        "SmearDeformerNode",             // Node name used in Maya
+        SmearDeformerNode::id,           // MTypeId
+        SmearDeformerNode::creator,      // Creator function
+        SmearDeformerNode::initialize,   // Initialize function
+        MPxNode::kDeformerNode           // Very important for deformer!
+    );
+
+    if (!status) {
+        status.perror("registerNode SmearDeformerNode");
+        return status;
+    }
+
 }
 
 MStatus uninitializePlugin(MObject obj) {
@@ -59,7 +77,13 @@ MStatus uninitializePlugin(MObject obj) {
 
     status = plugin.deregisterNode(SmearNode::id);
     if (!status) {
-        status.perror("deregisterNode");
+        status.perror("deregisterNode SmearNode");
+        return status;
+    }
+
+    status = plugin.deregisterNode(SmearDeformerNode::id);
+    if (!status) {
+        status.perror("deregisterNode SmearDeformerNode");
         return status;
     }
 }

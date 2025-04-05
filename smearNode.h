@@ -21,7 +21,6 @@ private:
 	MotionOffsetsSimple motionOffsetsSimple; 
 	// Tracks whether motion offsets are baked to avoid recomputation of offsets every frame
 	bool motionOffsetsBaked; 
-	MStatus getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug& inputMeshPlug, MDagPath& transformPath, MDagPath& shapePath) const;
 	
 
 public:

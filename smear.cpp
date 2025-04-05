@@ -13,6 +13,8 @@
 #include <maya/MMatrix.h>
 #include <maya/MDagPath.h>
 #include <maya/MFnMatrixData.h>
+#include <maya/MFnIkJoint.h>
+#include <maya/MItDependencyNodes.h>
 
 #define McheckErr(stat, msg)        \
     if (MS::kSuccess != stat) {     \
@@ -536,4 +538,53 @@ MStatus Smear::getTransformFromMesh(const MDagPath& meshPath, MDagPath& transfor
     transformPath = meshPath;
     transformPath.pop(); // Move to parent transform.
     return MS::kSuccess;
+}
+
+MStatus Smear::getSkeletonInformation()
+{
+    MStatus status;
+
+    // Iterate through all joints in the scene
+    MItDependencyNodes jointIter(MFn::kJoint, &status);
+    for (; !jointIter.isDone(); jointIter.next())
+    {
+        MObject jointObj = jointIter.item();
+        MFnIkJoint jointFn(jointObj, &status);
+
+        if (status == MS::kSuccess)
+        {
+            // Get joint name
+            MString jointName = jointFn.name();
+
+            //jointFn.getSegmentScale()
+            // Get world space position
+
+            MFnTransform transformFn(jointObj, &status);
+            McheckErr(status, "Failed to obtain the transform");
+            
+            MVector jointPos = jointFn.getTranslation(MSpace::kTransform);
+
+            // Get rotation (in radians)
+            MTransformationMatrix::RotationOrder rotOrder = transformFn.rotationOrder();
+
+            double rotation[3];
+            transformFn.getRotation(rotation, rotOrder);
+
+            // Get parent joint
+            MObject parentObj = jointFn.parent(0, &status);
+            MString parentName = "None";
+            if (status == MS::kSuccess && parentObj.hasFn(MFn::kJoint))
+            {
+                MFnIkJoint parentFn(parentObj);
+                parentName = parentFn.name();
+            }
+
+            const double conversion = (180.0 / 3.141592653589793238463);
+
+            MGlobal::displayInfo(MString("Joint: ") + jointName +
+                " | Parent: " + parentName +
+                " | Rotation: (" + rotation[0] * conversion + ", " + rotation[1] * conversion + ", " + rotation[2] * conversion + ")" +
+                " | Position: (" + jointPos.x + ", " + jointPos.y + ", " + jointPos.z + ")");
+        }
+    }
 }

@@ -68,7 +68,8 @@ MStatus SmearDeformerNode::initialize()
 MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
 {
     MStatus status; 
-
+    Smear::getSkeletonInformation();
+#if 0
     MDataHandle timeDataHandle = block.inputValue(time, &status); 
     McheckErr(status, "Failed to obtain data handle for time input"); 
 
@@ -180,6 +181,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
 
         iter.setPosition(interpolated);
     }
+#endif
     return MS::kSuccess();
 }
 

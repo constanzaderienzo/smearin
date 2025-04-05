@@ -35,4 +35,6 @@ public:
     static MStatus computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagPath& transformPath, MotionOffsetsSimple& motionOffsets);
     static MStatus extractAnimationFrameRange(const MDagPath& transformPath, double& startFrame, double& endFrame);
     static MStatus getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug& inputMeshPlug, MDagPath& transformPath, MDagPath& shapePath);
+
+    static MStatus getSkeletonInformation();
 };

@@ -222,27 +222,7 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
         xform.setTranslation(translation, MSpace::kTransform);
         xform.setRotation(rotation, rotOrder);
         xform.setScale(scale, MSpace::kTransform);
-        transformationMatrices[frame] = xform;
-
-        // Debug print
-        
-        //MString msg = MString() + "Frame " + frame + ":\n"
-        //+ "  Translation = (" +
-        //    translation.x + ", " +
-        //    translation.y + ", " +
-        //    translation.z + ")\n"
-
-        //+ "  Rotation (XYZ degrees) = (" +
-        //    rotation[0] + ", " +
-        //    rotation[1] + ", " +
-        //    rotation[2] + ")\n"
-
-        //+ "  Scale = (" +
-        //    scale[0] + ", " +
-        //    scale[1] + ", " +
-        //    scale[2] + ")";
-        //MGlobal::displayInfo(msg);
-        
+        transformationMatrices[frame] = xform;        
     }
 
     return MS::kSuccess;
@@ -550,41 +530,41 @@ MStatus Smear::getSkeletonInformation()
     {
         MObject jointObj = jointIter.item();
         MFnIkJoint jointFn(jointObj, &status);
+        McheckErr(status, "Failed to obtain joints");
+        
+        // Get joint name
+        MString jointName = jointFn.name();
 
-        if (status == MS::kSuccess)
-        {
-            // Get joint name
-            MString jointName = jointFn.name();
-
-            //jointFn.getSegmentScale()
-            // Get world space position
-
-            MFnTransform transformFn(jointObj, &status);
-            McheckErr(status, "Failed to obtain the transform");
+        MFnTransform transformFn(jointObj, &status);
+        McheckErr(status, "Failed to obtain the transform");
             
-            MVector jointPos = jointFn.getTranslation(MSpace::kTransform);
+        // Get translation
+        MVector jointPos = jointFn.getTranslation(MSpace::kTransform);
 
-            // Get rotation (in radians)
-            MTransformationMatrix::RotationOrder rotOrder = transformFn.rotationOrder();
+        // Get rotation (in radians)
+        MTransformationMatrix::RotationOrder rotOrder = transformFn.rotationOrder();
+        double rotation[3];
+        transformFn.getRotation(rotation, rotOrder);
 
-            double rotation[3];
-            transformFn.getRotation(rotation, rotOrder);
+        // Get scale
+        double scale[3];
+        jointFn.getScale(scale);
 
-            // Get parent joint
-            MObject parentObj = jointFn.parent(0, &status);
-            MString parentName = "None";
-            if (status == MS::kSuccess && parentObj.hasFn(MFn::kJoint))
-            {
-                MFnIkJoint parentFn(parentObj);
-                parentName = parentFn.name();
-            }
-
-            const double conversion = (180.0 / 3.141592653589793238463);
-
-            MGlobal::displayInfo(MString("Joint: ") + jointName +
-                " | Parent: " + parentName +
-                " | Rotation: (" + rotation[0] * conversion + ", " + rotation[1] * conversion + ", " + rotation[2] * conversion + ")" +
-                " | Position: (" + jointPos.x + ", " + jointPos.y + ", " + jointPos.z + ")");
+        // Get parent joint
+        MObject parentObj = jointFn.parent(0, &status);
+        MString parentName = "None";
+        if (status == MS::kSuccess && parentObj.hasFn(MFn::kJoint))
+        {
+            MFnIkJoint parentFn(parentObj);
+            parentName = parentFn.name();
         }
+
+        const double conversion = (180.0 / 3.141592653589793238463);
+        MGlobal::displayInfo(MString("Joint: ") + jointName +
+            " | Parent: " + parentName +
+            " | Rotation: (" + rotation[0] * conversion + ", " + rotation[1] * conversion + ", " + rotation[2] * conversion + ")" +
+            " | Scale: (" + scale[0] + ", " + scale[1] + ", " + scale[2] + ")" +
+            " | Position: (" + jointPos.x + ", " + jointPos.y + ", " + jointPos.z + ")");
+        
     }
 }

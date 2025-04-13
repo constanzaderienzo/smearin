@@ -10,6 +10,7 @@
 #include <maya/MFnDependencyNode.h>
 #include <math.h>
 #include <maya/MPoint.h>
+#include <maya/MTimeArray.h>
 
 
 #define McheckErr(stat, msg)        \
@@ -69,7 +70,8 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
 {
     MStatus status; 
     Smear::getSkeletonInformation();
-#if 0
+    
+
     MDataHandle timeDataHandle = block.inputValue(time, &status); 
     McheckErr(status, "Failed to obtain data handle for time input"); 
 
@@ -93,6 +95,11 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     MGlobal::displayInfo(MString("Mesh path: ") + meshPath.fullPathName());
     MGlobal::displayInfo(MString("Transform path: ") + transformPath.fullPathName());
 
+    MTimeArray times;
+    times = Smear::getAnimationRange();
+    Smear::computeBoneData(meshPath, times);
+
+#if 0
     // Check if the provided path point to correct node types.
     if (!meshPath.hasFn(MFn::kMesh)) {
         MGlobal::displayError("Smear::calculateCentroidOffsetFromPivot - meshPath does not point to a mesh node.");

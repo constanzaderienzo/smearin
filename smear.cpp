@@ -15,12 +15,50 @@
 #include <maya/MFnMatrixData.h>
 #include <maya/MFnIkJoint.h>
 #include <maya/MItDependencyNodes.h>
+#include <maya/MFnSkinCluster.h>
+#include <maya/MItDependencyGraph.h>
+#include <maya/MDagPathArray.h>
+#include <maya/MItDag.h>
 
 #define McheckErr(stat, msg)        \
     if (MS::kSuccess != stat) {     \
         MGlobal::displayError(msg); \
         return MS::kFailure;        \
     }
+
+
+MTimeArray Smear::getAnimationRange() {
+    MTimeArray timeArray;
+    MStatus status;
+
+    MGlobal::displayInfo("===== Extracting Animation Range =====");
+
+    // Get start/end from Maya's timeline
+    MTime startTime = MAnimControl::minTime();
+    MTime endTime = MAnimControl::maxTime();
+
+    MGlobal::displayInfo(MString("Timeline Range: ") +
+        startTime.value() + " to " + endTime.value() +
+        " (in " + startTime.unit() + ")");
+
+    // Convert to frame numbers
+    double startFrame = startTime.as(MTime::kFilm);
+    double endFrame = endTime.as(MTime::kFilm);
+
+    // Validate range
+    if (endFrame <= startFrame) {
+        MGlobal::displayError("Invalid animation range (end <= start)");
+        return timeArray;
+    }
+
+    // Populate time array
+    for (double frame = startFrame; frame <= endFrame; frame += 1.0) {
+        timeArray.append(MTime(frame, MTime::kFilm));
+    }
+
+    MGlobal::displayInfo(MString("Generated ") + (int)timeArray.length() + " frames");
+    return timeArray;
+}
 
 MStatus Smear::extractAnimationFrameRange(const MDagPath & transformPath, double& startFrame, double& endFrame) {
     MStatus status;
@@ -517,6 +555,88 @@ MStatus Smear::getTransformFromMesh(const MDagPath& meshPath, MDagPath& transfor
 
     transformPath = meshPath;
     transformPath.pop(); // Move to parent transform.
+    return MS::kSuccess;
+}
+
+MObject Smear::findSkinCluster(const MDagPath& meshPath) {
+    MStatus status;
+    MFnMesh fnMesh(meshPath.node(), &status);
+    if (!status) return MObject::kNullObj;
+
+    MPlug inMeshPlug = fnMesh.findPlug("inMesh", &status);
+    if (!status) return MObject::kNullObj;
+
+    MItDependencyGraph dgIt(inMeshPlug, MFn::kSkinClusterFilter,
+        MItDependencyGraph::kUpstream,
+        MItDependencyGraph::kDepthFirst,
+        MItDependencyGraph::kNodeLevel, &status);
+
+    if (!dgIt.isDone()) {
+        return dgIt.currentItem();
+    }
+    return MObject::kNullObj;
+}
+
+MStatus Smear::computeBoneData(const MDagPath& meshPath, const MTimeArray& times) {
+    MStatus status;
+    MObject skinClusterObj = findSkinCluster(meshPath);
+    if (skinClusterObj.isNull()) {
+        MGlobal::displayError("Aborting: No valid skinCluster found");
+        return MS::kFailure;
+    }
+    std::map<int, std::vector<BoneData>> frameBoneData; // Frame-indexed bone data
+    MFnSkinCluster skinCluster(skinClusterObj, &status);
+    if (!status) {
+        MGlobal::displayError("Failed to initialize MFnSkinCluster");
+        return MS::kFailure;
+    }
+    MGlobal::displayInfo(MString("Using skinCluster: ") + skinCluster.name());
+
+    MDagPathArray joints;
+    skinCluster.influenceObjects(joints, &status);
+    if (!status || joints.length() == 0) {
+        MGlobal::displayError("No influencing joints found");
+        return MS::kFailure;
+    }
+    MGlobal::displayInfo(MString("Found ") + (int)joints.length() + " influencing joints");
+
+    for (int frameIdx = 0; frameIdx < times.length(); ++frameIdx) {
+        MGlobal::viewFrame(times[frameIdx]);
+
+        std::vector<BoneData> bones;
+        for (unsigned int j = 0; j < joints.length(); ++j) {
+            BoneData bone;
+            bone.jointPath = joints[j];
+
+            // Get root position
+            MFnTransform jointTransform(joints[j]);
+            bone.rootPos = jointTransform.translation(MSpace::kWorld);
+
+            // Get tip position (child joint or end of bone)
+            MItDag childIt(MItDag::kDepthFirst, MFn::kJoint);
+            childIt.reset(joints[j], MItDag::kDepthFirst, MFn::kJoint);
+            if (childIt.next()) {
+                MFnTransform childTransform(childIt.item());
+                bone.tipPos = childTransform.translation(MSpace::kWorld);
+            }
+            else {
+                // No child: assume tip is offset along bone's orientation
+                MVector dir = jointTransform.rotateOrientation(MSpace::kWorld).asMatrix()[2];
+                bone.tipPos = bone.rootPos + dir * 1.0; // Adjust length as needed
+            }
+
+            // Compute velocity (if previous frame exists)
+            if (frameIdx > 0) {
+                BoneData& prevBone = frameBoneData[frameIdx - 1][j];
+                double dt = times[frameIdx].value() - times[frameIdx - 1].value();
+                bone.rootVel = (bone.rootPos - prevBone.rootPos) / dt;
+                bone.tipVel = (bone.tipPos - prevBone.tipPos) / dt;
+            }
+
+            bones.push_back(bone);
+        }
+        frameBoneData[frameIdx] = bones;
+    }
     return MS::kSuccess;
 }
 

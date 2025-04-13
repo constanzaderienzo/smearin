@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <map>
 #include <maya/MVector.h>
 #include <maya/MObject.h>
 #include <maya/MFnTransform.h>
@@ -7,6 +8,7 @@
 #include <maya/MVectorArray.h>
 #include <maya/MPointArray.h>
 #include <maya/MDoubleArray.h>
+#include <maya/MDagPath.h>
 
 using std::cout;
 using std::endl;
@@ -16,6 +18,13 @@ struct MotionOffsetsSimple {
     double endFrame;
     std::vector<MDoubleArray> motionOffsets;  // 2D: motionOffsets[frame][vertex]
     std::vector<MPointArray> vertexTrajectories; // Store per-vertex trajectory
+};
+struct BoneData {
+    MPoint rootPos;
+    MPoint tipPos;
+    MVector rootVel;
+    MVector tipVel;
+    MDagPath jointPath;
 };
 
 class Smear
@@ -37,4 +46,8 @@ public:
     static MStatus getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug& inputMeshPlug, MDagPath& transformPath, MDagPath& shapePath);
 
     static MStatus getSkeletonInformation();
+    static MObject findSkinCluster(const MDagPath& meshPath);
+    static MStatus computeBoneData(const MDagPath& meshPath, const MTimeArray& times);
+    static MTimeArray getAnimationRange();
+
 };

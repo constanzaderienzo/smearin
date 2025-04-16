@@ -558,88 +558,6 @@ MStatus Smear::getTransformFromMesh(const MDagPath& meshPath, MDagPath& transfor
     return MS::kSuccess;
 }
 
-MObject Smear::findSkinCluster(const MDagPath& meshPath) {
-    MStatus status;
-    MFnMesh fnMesh(meshPath.node(), &status);
-    if (!status) return MObject::kNullObj;
-
-    MPlug inMeshPlug = fnMesh.findPlug("inMesh", &status);
-    if (!status) return MObject::kNullObj;
-
-    MItDependencyGraph dgIt(inMeshPlug, MFn::kSkinClusterFilter,
-        MItDependencyGraph::kUpstream,
-        MItDependencyGraph::kDepthFirst,
-        MItDependencyGraph::kNodeLevel, &status);
-
-    if (!dgIt.isDone()) {
-        return dgIt.currentItem();
-    }
-    return MObject::kNullObj;
-}
-
-MStatus Smear::computeBoneData(const MDagPath& meshPath, const MTimeArray& times) {
-    MStatus status;
-    MObject skinClusterObj = findSkinCluster(meshPath);
-    if (skinClusterObj.isNull()) {
-        MGlobal::displayError("Aborting: No valid skinCluster found");
-        return MS::kFailure;
-    }
-    std::map<int, std::vector<BoneData>> frameBoneData; // Frame-indexed bone data
-    MFnSkinCluster skinCluster(skinClusterObj, &status);
-    if (!status) {
-        MGlobal::displayError("Failed to initialize MFnSkinCluster");
-        return MS::kFailure;
-    }
-    MGlobal::displayInfo(MString("Using skinCluster: ") + skinCluster.name());
-
-    MDagPathArray joints;
-    skinCluster.influenceObjects(joints, &status);
-    if (!status || joints.length() == 0) {
-        MGlobal::displayError("No influencing joints found");
-        return MS::kFailure;
-    }
-    MGlobal::displayInfo(MString("Found ") + (int)joints.length() + " influencing joints");
-
-    for (int frameIdx = 0; frameIdx < times.length(); ++frameIdx) {
-        MGlobal::viewFrame(times[frameIdx]);
-
-        std::vector<BoneData> bones;
-        for (unsigned int j = 0; j < joints.length(); ++j) {
-            BoneData bone;
-            bone.jointPath = joints[j];
-
-            // Get root position
-            MFnTransform jointTransform(joints[j]);
-            bone.rootPos = jointTransform.translation(MSpace::kWorld);
-
-            // Get tip position (child joint or end of bone)
-            MItDag childIt(MItDag::kDepthFirst, MFn::kJoint);
-            childIt.reset(joints[j], MItDag::kDepthFirst, MFn::kJoint);
-            if (childIt.next()) {
-                MFnTransform childTransform(childIt.item());
-                bone.tipPos = childTransform.translation(MSpace::kWorld);
-            }
-            else {
-                // No child: assume tip is offset along bone's orientation
-                MVector dir = jointTransform.rotateOrientation(MSpace::kWorld).asMatrix()[2];
-                bone.tipPos = bone.rootPos + dir * 1.0; // Adjust length as needed
-            }
-
-            // Compute velocity (if previous frame exists)
-            if (frameIdx > 0) {
-                BoneData& prevBone = frameBoneData[frameIdx - 1][j];
-                double dt = times[frameIdx].value() - times[frameIdx - 1].value();
-                bone.rootVel = (bone.rootPos - prevBone.rootPos) / dt;
-                bone.tipVel = (bone.tipPos - prevBone.tipPos) / dt;
-            }
-
-            bones.push_back(bone);
-        }
-        frameBoneData[frameIdx] = bones;
-    }
-    return MS::kSuccess;
-}
-
 MStatus Smear::getSkeletonInformation()
 {
     MStatus status;
@@ -687,4 +605,76 @@ MStatus Smear::getSkeletonInformation()
             " | Position: (" + jointPos.x + ", " + jointPos.y + ", " + jointPos.z + ")");
         
     }
+}
+
+MStatus Smear::getSkinClusterAndBones(const MDagPath& inputPath,
+    MObject& skinClusterObj,
+    MDagPathArray& influenceBones)
+{
+    MStatus status;
+
+    // Make sure we’re starting from the transform
+    MDagPath meshPath = inputPath;
+    if (meshPath.apiType() == MFn::kMesh) {
+        meshPath.pop();
+    }
+
+    // Get shape from meshPath
+    MFnDagNode meshFn(meshPath);
+    MObject shapeObj;
+    for (unsigned int i = 0; i < meshFn.childCount(); ++i) {
+        MObject child = meshFn.child(i);
+        if (child.hasFn(MFn::kMesh)) {
+            shapeObj = child;
+            break;
+        }
+    }
+
+    if (shapeObj.isNull()) {
+        MGlobal::displayError("No shape found under transform: " + meshPath.fullPathName());
+        return MS::kFailure;
+    }
+
+    // Loop through all skinClusters in the scene
+    MItDependencyNodes itSkin(MFn::kSkinClusterFilter);
+    while (!itSkin.isDone()) {
+        MObject skinObj = itSkin.item();
+        MFnSkinCluster skinFn(skinObj, &status);
+        if (!status) {
+            itSkin.next();
+            continue;
+        }
+
+        // Check if this skinCluster deforms our shape
+        uint32_t numGeoms = skinFn.numOutputConnections();
+        for (uint32_t i = 0; i < numGeoms; ++i) {
+            uint32_t index = skinFn.indexForOutputConnection(i, &status);
+            if (!status) continue;
+
+            MDagPath skinnedPath;
+            status = skinFn.getPathAtIndex(index, skinnedPath);
+            if (!status) continue;
+
+            if (skinnedPath.node() == shapeObj) {
+                // Found the right skinCluster
+                skinClusterObj = skinObj;
+
+                // Get influences
+                skinFn.influenceObjects(influenceBones, &status);
+                if (!status) {
+                    MGlobal::displayError("Failed to get influences");
+                    return status;
+                }
+
+                MGlobal::displayInfo("Found skinCluster: " + MFnDependencyNode(skinClusterObj).name());
+                MGlobal::displayInfo("Found " + influenceBones.length());
+                return MS::kSuccess;
+            }
+        }
+
+        itSkin.next();
+    }
+
+    MGlobal::displayError("No matching skinCluster found for mesh: " + meshPath.fullPathName());
+    return MS::kFailure;
 }

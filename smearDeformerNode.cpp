@@ -8,9 +8,12 @@
 #include <maya/MGlobal.h>
 #include <maya/MDagPathArray.h>
 #include <maya/MFnDependencyNode.h>
+#include <maya/MItDependencyGraph.h>
 #include <math.h>
 #include <maya/MPoint.h>
 #include <maya/MTimeArray.h>
+#include <maya/MFnSkinCluster.h>
+#include <maya/MFnSingleIndexedComponent.h>
 
 
 #define McheckErr(stat, msg)        \
@@ -28,7 +31,7 @@ MObject SmearDeformerNode::aStrength;
 
 
 SmearDeformerNode::SmearDeformerNode():
-    motionOffsets(), motionOffsetsBaked(false)
+    motionOffsets(), motionOffsetsBaked(false), skinDataBaked(false)
 {}
 
 SmearDeformerNode::~SmearDeformerNode()
@@ -69,37 +72,129 @@ MStatus SmearDeformerNode::initialize()
 MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
 {
     MStatus status; 
-    Smear::getSkeletonInformation();
-    
+       
+    MArrayDataHandle hInputArray = block.inputArrayValue(input, &status);
+    if (!status) {
+        MGlobal::displayError("Failed to get input geometry array: " + MString(status.errorString()));
+        return status;
+    }
 
-    MDataHandle timeDataHandle = block.inputValue(time, &status); 
-    McheckErr(status, "Failed to obtain data handle for time input"); 
+    // Jump to the element corresponding to the current multiIndex.
+    status = hInputArray.jumpToElement(multiIndex);
+    if (!status) {
+        MGlobal::displayError("Failed to jump to input element.");
+        return status;
+    }
 
-    MTime currentTime = timeDataHandle.asTime();
-    double currentFrame = currentTime.as(MTime::kFilm);
-    
-    // Get mesh and transform DAG path
-    MFnDependencyNode thisNodeFn(thisMObject());
-    MObject thisNode = thisMObject();
-    MPlug inputPlug(thisMObject(), input);
-    inputPlug = inputPlug.elementByLogicalIndex(0).child(inputGeom);
+    // Get the geometry data.
+    MDataHandle hInput = hInputArray.inputValue(&status);
+    if (!status) {
+        MGlobal::displayError("Failed to get the input value.");
+        return status;
+    }
+    MDataHandle hGeom = hInput.child(inputGeom);
+    MObject geomObj = hGeom.data();
+    // 2. Get connected mesh node from input plug
+    MPlug inputPlug(thisMObject(), input);  // input[] plug
+    MPlug inputElementPlug = inputPlug.elementByLogicalIndex(multiIndex, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
 
-    MObject meshObj;
-    inputPlug.getValue(meshObj);
-    McheckErr(status, "Failed to get mesh object");
-    
-    //MPlug inputPlug = thisNodeFn.findPlug(inputMesh, true);
-    MDagPath meshPath, transformPath;
-    status = Smear::getDagPathsFromInputMesh(meshObj, inputPlug, transformPath, meshPath);
+    MPlug geomPlug = inputElementPlug.child(inputGeom, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
 
-    MGlobal::displayInfo(MString("Mesh path: ") + meshPath.fullPathName());
-    MGlobal::displayInfo(MString("Transform path: ") + transformPath.fullPathName());
+    MPlugArray connections;
+    geomPlug.connectedTo(connections, true, false, &status);  // look upstream.
+    CHECK_MSTATUS_AND_RETURN_IT(status);
 
-    MTimeArray times;
-    times = Smear::getAnimationRange();
-    Smear::computeBoneData(meshPath, times);
+    MPlug srcPlug = connections[0];
+    MObject meshNode = srcPlug.node();
+
+    if (meshNode.hasFn(MFn::kMesh)) {
+        // Already a mesh node
+    }
+    else if (meshNode.hasFn(MFn::kDependencyNode)) {
+        // Possibly a shape's outMesh plug — we walk upstream
+        MItDependencyGraph dgIt(srcPlug,
+            MFn::kMesh,
+            MItDependencyGraph::kUpstream,
+            MItDependencyGraph::kDepthFirst,
+            MItDependencyGraph::kPlugLevel);
+
+        if (!dgIt.isDone()) {
+            meshNode = dgIt.currentItem();  // This should be the actual mesh node
+        }
+        else {
+            MGlobal::displayWarning("Upstream mesh node not found.");
+            return MStatus::kFailure;
+        }
+    }
+
+    // 3. Get DAG path to mesh
+    MDagPath meshPath;
+    status = MDagPath::getAPathTo(meshNode, meshPath);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    // DEBUG SAFETY
+    MGlobal::displayInfo(MString("Processing: ") + meshPath.fullPathName());
+
+    if (!skinDataBaked) {
+        MGlobal::displayInfo("Calculating skin data.");
+        // 1. Get skinCluster and influence bones
+        MObject skinClusterObj;
+        MDagPathArray influenceBones;
+        status = Smear::getSkinClusterAndBones(meshPath, skinClusterObj, influenceBones);
+        if (!status) return status;
+
+        MFnSkinCluster skinFn(skinClusterObj, &status);
+        CHECK_MSTATUS_AND_RETURN_IT(status);
+
+        // 2. Create full vertex component
+        MFnSingleIndexedComponent compFn;
+        MObject vertexComp = compFn.create(MFn::kMeshVertComponent, &status);
+        CHECK_MSTATUS_AND_RETURN_IT(status);
+
+        uint numVertices = iter.count(&status);
+        CHECK_MSTATUS_AND_RETURN_IT(status);
+
+        for (uint i = 0; i < numVertices; ++i) {
+            compFn.addElement(i);
+        }
+
+        // 3. Get all weights for all influences on all vertices
+        MDagPath inputMeshPath = meshPath;
+        uint numInfluences;
+        MDoubleArray weights;
+
+        status = skinFn.getWeights(inputMeshPath, vertexComp, weights, numInfluences);
+        MGlobal::displayInfo("After get weights.");
+        CHECK_MSTATUS_AND_RETURN_IT(status);
+
+        // 4. Reshape into per-vertex storage
+        vertexWeights.clear();
+        vertexWeights.resize(numVertices);
+
+        for (uint v = 0; v < numVertices; ++v) {
+            std::vector<InfluenceData> influences;
+
+            for (uint j = 0; j < numInfluences; ++j) {
+                float w = static_cast<float>(weights[v * numInfluences + j]);
+                if (w > 0.001f) {  // ignore negligible weights
+                    influences.push_back({ j, w });
+                }
+            }
+            vertexWeights[v] = influences;
+        }
+
+        skinDataBaked = true;
+        MGlobal::displayInfo("Skin weights initialized and cached.");
+    }
+
+    return MStatus::kSuccess;
 
 #if 0
+    MTimeArray times;
+    times = Smear::getAnimationRange();
+    //Smear::getSkeletonInformation();
+
     // Check if the provided path point to correct node types.
     if (!meshPath.hasFn(MFn::kMesh)) {
         MGlobal::displayError("Smear::calculateCentroidOffsetFromPivot - meshPath does not point to a mesh node.");

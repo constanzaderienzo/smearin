@@ -46,8 +46,7 @@ public:
     static MStatus getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug& inputMeshPlug, MDagPath& transformPath, MDagPath& shapePath);
 
     static MStatus getSkeletonInformation();
-    static MObject findSkinCluster(const MDagPath& meshPath);
-    static MStatus computeBoneData(const MDagPath& meshPath, const MTimeArray& times);
+    static MStatus getSkinClusterAndBones(const MDagPath& meshPath, MObject& skinClusterObj, MDagPathArray& influenceBones);
     static MTimeArray getAnimationRange();
 
 };

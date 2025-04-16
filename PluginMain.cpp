@@ -102,10 +102,18 @@ MStatus executeMELScript() {
 
             // Create the MotionLines node (using its node type) and give it a name, e.g., "MotionLinesNode1"
             createNode MotionLinesNode -name "MotionLinesNode1";
+            
+            // Create transform and mesh that we will use to output motion lines mesh
+            createNode transform -n MotionLines1;
+            createNode mesh -n MotionLinesShape1 -p MotionLines1;
+            
             string $motionLinesNode = "MotionLinesNode1";
 
             // Connect the scene time to the MotionLines node's "time" attribute
             connectAttr "time1.outTime" ($motionLinesNode + ".tm");
+            
+            // Connect the node mesh output to the mesh we just created so that motion lines are visible
+            connectAttr MotionLinesNode1.outputMesh MotionLinesShape1.inMesh;
 
             // Connect the selected object's mesh to the MotionLines node's input mesh attribute.
             // This replaces the hardcoded cube; now the node will use the mesh from $target.

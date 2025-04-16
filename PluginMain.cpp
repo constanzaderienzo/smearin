@@ -13,6 +13,7 @@
 #include "smearNode.h"
 #include "smearDeformerNode.h"
 #include "smearControlNode.h"
+#include "motionLinesNode.h"
 
 class PluginMain : public MPxCommand {
 private: 
@@ -59,7 +60,7 @@ MStatus executeMELScript() {
             showWindow applySmearWindow;
         }
 
-        // New procedure for creating the Nodes required for SMEAR
+        // New procedure for creating the Nodes required for SMEAR and Motion Lines
         global proc createSmearRelatedNodes() {
             // Get the currently selected object(s)
             string $sel[] = `ls -sl`;
@@ -83,24 +84,42 @@ MStatus executeMELScript() {
             // and the deformer node defines its corresponding message attribute as "inputControlMessage")
             connectAttr -force ($controlNode + ".controlMessage") ($deformerNode + ".inputControlMessage");
 
-            // Optionally, you may want to drive the numeric attributes directly:
-            // Here we assume the control node's numeric attributes are:
-            //    "strengthPast" with short name "sp"
-            //    "strengthFuture" with short name "sf"
-            //    "smoothWindow" with short name "sw"
-            // And the deformer node's corresponding attributes have short names "ps", "fs", and "smwin"
+            // Connect the 'elongationStrengthPast' attribute
+            connectAttr ($controlNode + ".elongationStrengthPast") ($deformerNode + ".ps");
 
-            // Connect the 'strengthPast' attribute
-            connectAttr ($controlNode + ".strengthPast") ($deformerNode + ".ps");
+            // Connect the 'elongationStrengthFuture' attribute
+            connectAttr ($controlNode + ".elongationStrengthFuture") ($deformerNode + ".fs");
 
-            // Connect the 'strengthFuture' attribute
-            connectAttr ($controlNode + ".strengthFuture") ($deformerNode + ".fs");
-
-            // Connect the 'smoothWindow' attribute
-            connectAttr ($controlNode + ".smoothWindow") ($deformerNode + ".smwin");
-            
+            // Connect the 'elongationSmoothWindow' attribute
+            connectAttr ($controlNode + ".elongationSmoothWindow") ($deformerNode + ".smwin");
+     
             // Connect the 'applyElongation' attribute
             connectAttr ($controlNode + ".applyElongation") ($deformerNode + ".apl");
+     
+            // -----------------------------
+            // Create and connect the Motion Lines node
+            // -----------------------------
+
+            // Create the MotionLines node (using its node type) and give it a name, e.g., "MotionLinesNode1"
+            createNode MotionLinesNode -name "MotionLinesNode1";
+            string $motionLinesNode = "MotionLinesNode1";
+
+            // Connect the scene time to the MotionLines node's "time" attribute
+            connectAttr "time1.outTime" ($motionLinesNode + ".tm");
+
+            // Connect the selected object's mesh to the MotionLines node's input mesh attribute.
+            // This replaces the hardcoded cube; now the node will use the mesh from $target.
+            connectAttr ($target + ".outMesh") ($motionLinesNode + ".in");
+
+            // Connect the message attribute from the control node to the MotionLines node.
+            // (Assuming MotionLinesNode defines its control message attribute as "inputControlMsg")
+            connectAttr -force ($controlNode + ".controlMessage") ($motionLinesNode + ".icm");
+
+            // Optionally, connect additional control node attributes to the MotionLines node's attributes
+            connectAttr ($controlNode + ".motionLinesStrengthPast")   ($motionLinesNode + ".ps");
+            connectAttr ($controlNode + ".motionLinesStrengthFuture") ($motionLinesNode + ".fs");
+            connectAttr ($controlNode + ".motionLinesSmoothWindow")     ($motionLinesNode + ".smwin");
+            connectAttr ($controlNode + ".generateMotionLines") ($motionLinesNode + ".gen");
 
             // Open the control panel window for editing node attributes
             smearControlGUI(); 
@@ -127,10 +146,39 @@ MStatus executeMELScript() {
                 connectControl "futureStrengthSlider" "smearControl1.sf";
 
                 // Create a slider for Smooth Window (attribute smearControl1.sw)
-                intSliderGrp -label "Smooth Window:" -field true -min 0 -max 5 smoothWindowSlider;
-                connectControl "smoothWindowSlider" "smearControl1.sw";
+                intSliderGrp -label "Smooth Window:" -field true -min 0 -max 5 elongationSmoothWindowSlider;
+                connectControl "elongationSmoothWindowSlider" "smearControl1.sw";
+                
+                // Create a checkbox for toggling Motion Lines generation
+                checkBox -label "Apply Elongation" applyElongationCheckbox;
+                connectControl "applyElongationCheckbox" "smearControl1.applyElongation";
             setParent ..; // End inner columnLayout
         setParent ..; // End frameLayout
+
+        // Create a frame layout (collapsible section) for the "Motion Lines" category
+        frameLayout -label "Motion Lines" -collapsable true -collapse false;
+            columnLayout -adjustableColumn true;
+                // Create a slider for Motion Lines Past Strength 
+                // (assumed attribute name: smearControl1.motionLinesStrengthPast)
+                floatSliderGrp -label "Motion Lines Past Strength:" -field true -min 0 -max 5 motionLinesPastStrengthSlider;
+                connectControl "motionLinesPastStrengthSlider" "smearControl1.motionLinesStrengthPast";
+
+                // Create a slider for Motion Lines Future Strength
+                // (assumed attribute name: smearControl1.motionLinesStrengthFuture)
+                floatSliderGrp -label "Motion Lines Future Strength:" -field true -min 0 -max 5 motionLinesFutureStrengthSlider;
+                connectControl "motionLinesFutureStrengthSlider" "smearControl1.motionLinesStrengthFuture";
+
+                // Create a slider for Motion Lines Smooth Window
+                // (assumed attribute name: smearControl1.motionLinesSmoothWindow)
+                intSliderGrp -label "Motion Lines Smooth Window:" -field true -min 0 -max 5 motionLinesSmoothWindowSlider;
+                connectControl "motionLinesSmoothWindowSlider" "smearControl1.motionLinesSmoothWindow";
+
+                // Create a checkbox for toggling Motion Lines generation
+                // (assumed attribute name: smearControl1.generateMotionLines)
+                checkBox -label "Generate Motion Lines" generateMotionLinesCheckbox;
+                connectControl "generateMotionLinesCheckbox" "smearControl1.generateMotionLines";
+            setParent ..;  // End inner columnLayout
+        setParent ..;      // End frameLayout
 
         // Show the window so it's visible
         showWindow smearControlWindow;
@@ -205,6 +253,18 @@ MStatus initializePlugin(MObject obj) {
         return status;
     }
 
+    status = plugin.registerNode(
+        "MotionLinesNode",             // Node name used in Maya
+        MotionLinesNode::id,           // MTypeId
+        MotionLinesNode::creator,      // Creator function
+        MotionLinesNode::initialize   // Initialize function
+    );
+
+    if (!status) {
+        status.perror("registerNode MotionLinesNode");
+        return status;
+    }
+
     // Adds plugin related GUI to the Maya toolbar
     executeMELScript();
 
@@ -230,6 +290,12 @@ MStatus uninitializePlugin(MObject obj) {
     status = plugin.deregisterNode(SmearControlNode::id);
     if (!status) {
         status.perror("deregisterNode SmearControlNode");
+        return status;
+    }
+
+    status = plugin.deregisterNode(MotionLinesNode::id);
+    if (!status) {
+        status.perror("deregisterNode MotionLinesNode");
         return status;
     }
 

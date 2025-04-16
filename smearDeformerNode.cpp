@@ -22,10 +22,10 @@
 
 MTypeId SmearDeformerNode::id(0x98530); // Random id 
 MObject SmearDeformerNode::time;
-MObject SmearDeformerNode::smoothWindowSize;
+MObject SmearDeformerNode::elongationSmoothWindowSize;
 MObject SmearDeformerNode::smoothEnabled;
-MObject SmearDeformerNode::aStrengthPast;
-MObject SmearDeformerNode::aStrengthFuture; 
+MObject SmearDeformerNode::aelongationStrengthPast;
+MObject SmearDeformerNode::aelongationStrengthFuture; 
 MObject SmearDeformerNode::aApplyElongation;
 
 // Message attribute for connecting to the control node.
@@ -58,22 +58,22 @@ MStatus SmearDeformerNode::initialize()
     smoothEnabled = numAttr.create("smoothEnabled", "smenb", MFnNumericData::kBoolean, true);
     addAttribute(smoothEnabled);
 
-    smoothWindowSize = numAttr.create("smoothWindow", "smwin", MFnNumericData::kInt, 2);
+    elongationSmoothWindowSize = numAttr.create("elongationSmoothWindow", "smwin", MFnNumericData::kInt, 2);
     numAttr.setMin(0);
     numAttr.setMax(5);
-    addAttribute(smoothWindowSize);
+    addAttribute(elongationSmoothWindowSize);
     
     // The length of the backward (trailing) elongation effect 
-    aStrengthPast = numAttr.create("Past Strength", "ps", MFnNumericData::kDouble, 1.5);
+    aelongationStrengthPast = numAttr.create("Past Strength", "ps", MFnNumericData::kDouble, 1.5);
     numAttr.setMin(0);
     numAttr.setMax(5);
-    addAttribute(aStrengthPast);
+    addAttribute(aelongationStrengthPast);
     
     // The length of the forward (leading) elongation effect
-    aStrengthFuture = numAttr.create("Future Strength", "fs", MFnNumericData::kDouble, 1.5);
+    aelongationStrengthFuture = numAttr.create("Future Strength", "fs", MFnNumericData::kDouble, 1.5);
     numAttr.setMin(0);
     numAttr.setMax(5);
-    addAttribute(aStrengthFuture);
+    addAttribute(aelongationStrengthFuture);
 
     // Create the boolean attribute for applying elongation.
     aApplyElongation = numAttr.create("applyElongation", "apl", MFnNumericData::kBoolean, true, &status);
@@ -153,7 +153,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     const int numFrames = trajectories.size();
 
     const bool smoothingEnabled = block.inputValue(smoothEnabled).asBool();
-    const int N = smoothingEnabled ? block.inputValue(smoothWindowSize).asInt() : 0;
+    const int N = smoothingEnabled ? block.inputValue(elongationSmoothWindowSize).asInt() : 0;
     std::vector<double> smoothedOffsets(offsets.length(), 0.0);
 
     // Precompute smoothed offsets for all vertices
@@ -180,8 +180,8 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     }
 
     // Artistic control param
-    const double strengthPast = block.inputValue(aStrengthPast).asDouble();
-    const double strengthFuture = block.inputValue(aStrengthFuture).asDouble(); 
+    const double elongationStrengthPast = block.inputValue(aelongationStrengthPast).asDouble();
+    const double elongationStrengthFuture = block.inputValue(aelongationStrengthFuture).asDouble(); 
 
     MPoint point; 
     for (; !iter.isDone(); iter.next()) {
@@ -196,7 +196,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
 
         // Calculate the strength factor based on motion offset value 
         double t1 = (offset + 1.) / 2.; // remaps motion offset from [-1, 1] to [0, 1] 
-        double interpolatedStrength = (1.0 - t1) * strengthPast + t1 * strengthFuture;
+        double interpolatedStrength = (1.0 - t1) * elongationStrengthPast + t1 * elongationStrengthFuture;
 
         const double beta = offset * interpolatedStrength;
 

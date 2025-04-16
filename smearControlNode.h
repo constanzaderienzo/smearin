@@ -22,10 +22,15 @@ public:
     static MTypeId id;  // Unique node ID
 
     // Attribute declarations
-    static MObject aStrengthPast; // Controls the length of the backward (trailing) elongation effect.
-    static MObject aStrengthFuture; // Controls the length of the forward (leading) elongation effect.
-    static MObject aSmoothWindow; // Controls the size of the smoothing window.
+    static MObject aElongationStrengthPast; // Controls the length of the backward (trailing) elongation effect.
+    static MObject aElongationStrengthFuture; // Controls the length of the forward (leading) elongation effect.
+    static MObject aElongationSmoothWindow; // Controls the size of the smoothing window.
     static MObject aApplyElongation; 
+
+    static MObject aMotionLinesStrengthPast; // Controls the length of the backward (trailing) motion lines effect.
+    static MObject aMotionLinesStrengthFuture; // Controls the length of the forward (leading) motion lines effect.
+    static MObject aMotionLinesSmoothWindow; // Controls the size of the smoothing window.
+    static MObject aGenerateMotionLines;
 
     // Message attribute to connect to the deformer node.
     static MObject aControlMsg;

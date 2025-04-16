@@ -12,10 +12,16 @@
     }
 
 MTypeId SmearControlNode::id(0x98523); // Random id 
-MObject SmearControlNode::aSmoothWindow;
-MObject SmearControlNode::aStrengthPast;
-MObject SmearControlNode::aStrengthFuture;
+MObject SmearControlNode::aElongationSmoothWindow;
+MObject SmearControlNode::aElongationStrengthPast;
+MObject SmearControlNode::aElongationStrengthFuture;
 MObject SmearControlNode::aApplyElongation; 
+
+MObject SmearControlNode::aMotionLinesStrengthPast; 
+MObject SmearControlNode::aMotionLinesStrengthFuture; 
+MObject SmearControlNode::aMotionLinesSmoothWindow; 
+MObject SmearControlNode::aGenerateMotionLines;
+
 MObject SmearControlNode::aControlMsg;
 
 SmearControlNode::SmearControlNode()
@@ -36,38 +42,78 @@ MStatus SmearControlNode::initialize() {
     MFnMessageAttribute mAttr;
     MStatus status;
 
-    // Create strengthPast attribute.
-    aStrengthPast = nAttr.create("strengthPast", "sp", MFnNumericData::kDouble, 1.5, &status);
+    // Create elongationStrengthPast attribute.
+    aElongationStrengthPast = nAttr.create("elongationStrengthPast", "sp", MFnNumericData::kDouble, 1.5, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
     nAttr.setMin(0.0);
     nAttr.setMax(5.0);
     nAttr.setStorable(true);
     nAttr.setKeyable(true);
-    addAttribute(aStrengthPast);
+    addAttribute(aElongationStrengthPast);
 
-    // Create strengthFuture attribute.
-    aStrengthFuture = nAttr.create("strengthFuture", "sf", MFnNumericData::kDouble, 1.5, &status);
+    // Create elongationStrengthFuture attribute.
+    aElongationStrengthFuture = nAttr.create("elongationStrengthFuture", "sf", MFnNumericData::kDouble, 1.5, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
     nAttr.setMin(0.0);
     nAttr.setMax(5.0);
     nAttr.setStorable(true);
     nAttr.setKeyable(true);
-    addAttribute(aStrengthFuture);
+    addAttribute(aElongationStrengthFuture);
 
-    // Create smoothWindow attribute.
-    aSmoothWindow = nAttr.create("smoothWindow", "sw", MFnNumericData::kInt, 2, &status);
+    // Create elongationSmoothWindow attribute.
+    aElongationSmoothWindow = nAttr.create("elongationSmoothWindow", "sw", MFnNumericData::kInt, 2, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
     nAttr.setMin(0);
     nAttr.setMax(5);
     nAttr.setStorable(true);
     nAttr.setKeyable(true);
-    addAttribute(aSmoothWindow);
+    addAttribute(aElongationSmoothWindow);
 
     // Create the boolean attribute for applying elongation.
     aApplyElongation = nAttr.create("applyElongation", "apl", MFnNumericData::kBoolean, true, &status);
     nAttr.setStorable(true);
     nAttr.setKeyable(true);
-    addAttribute(aApplyElongation);
+    addAttribute(aApplyElongation); 
+
+    // Create motionLinesStrengthPast attribute.
+    // Controls the length of the backward (trailing) elongation effect.
+    aMotionLinesStrengthPast = nAttr.create("motionLinesStrengthPast", "mlsp", MFnNumericData::kDouble, 1.5, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setMin(0.0);
+    nAttr.setMax(5.0);
+    nAttr.setStorable(true);
+    nAttr.setKeyable(true);
+    addAttribute(aMotionLinesStrengthPast);
+
+    // Create motionLinesStrengthFuture attribute.
+    // Controls the length of the forward (leading) elongation effect.
+    aMotionLinesStrengthFuture = nAttr.create("motionLinesStrengthFuture", "mlsf", MFnNumericData::kDouble, 1.5, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setMin(0.0);
+    nAttr.setMax(5.0);
+    nAttr.setStorable(true);
+    nAttr.setKeyable(true);
+    addAttribute(aMotionLinesStrengthFuture);
+
+    // Create motionLinesSmoothWindow attribute.
+    // Controls the size of the smoothing window.
+    aMotionLinesSmoothWindow = nAttr.create("motionLinesSmoothWindow", "mlsw", MFnNumericData::kInt, 2, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setMin(0);
+    nAttr.setMax(5);
+    nAttr.setStorable(true);
+    nAttr.setKeyable(true);
+    addAttribute(aMotionLinesSmoothWindow);
+
+    // Create generateMotionLines attribute.
+    // Boolean attribute to drive generation of motion lines.
+    aGenerateMotionLines = nAttr.create("generateMotionLines", "gml", MFnNumericData::kBoolean, true, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setStorable(true);
+    nAttr.setKeyable(true);
+    addAttribute(aGenerateMotionLines);
+
+
 
     // Create and add a message attribute.
     aControlMsg = mAttr.create("controlMessage", "ctrlMsg", &status);

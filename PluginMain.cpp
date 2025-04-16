@@ -128,6 +128,7 @@ MStatus executeMELScript() {
             connectAttr ($controlNode + ".motionLinesStrengthPast")   ($motionLinesNode + ".ps");
             connectAttr ($controlNode + ".motionLinesStrengthFuture") ($motionLinesNode + ".fs");
             connectAttr ($controlNode + ".motionLinesSmoothWindow")     ($motionLinesNode + ".smwin");
+            connectAttr ($controlNode + ".motionLinesCount") ($motionLinesNode + ".mlcnt");
             connectAttr ($controlNode + ".generateMotionLines") ($motionLinesNode + ".gen");
 
             // Open the control panel window for editing node attributes
@@ -146,6 +147,10 @@ MStatus executeMELScript() {
         // Create a frame layout (collapsible section) for the "Elongated in-between" category
         frameLayout -label "Elongated in-between" -collapsable true -collapse false;
             columnLayout -adjustableColumn true;
+                // Create a checkbox for toggling Motion Lines generation
+                checkBox -label "Apply Elongation" applyElongationCheckbox;
+                connectControl "applyElongationCheckbox" "smearControl1.applyElongation";
+
                 // Create a slider for Past Strength (attribute smearControl1.sp)
                 floatSliderGrp -label "Past Strength:" -field true -min 0 -max 5 pastStrengthSlider;
                 connectControl "pastStrengthSlider" "smearControl1.sp";
@@ -157,16 +162,22 @@ MStatus executeMELScript() {
                 // Create a slider for Smooth Window (attribute smearControl1.sw)
                 intSliderGrp -label "Smooth Window:" -field true -min 0 -max 5 elongationSmoothWindowSlider;
                 connectControl "elongationSmoothWindowSlider" "smearControl1.sw";
-                
-                // Create a checkbox for toggling Motion Lines generation
-                checkBox -label "Apply Elongation" applyElongationCheckbox;
-                connectControl "applyElongationCheckbox" "smearControl1.applyElongation";
             setParent ..; // End inner columnLayout
         setParent ..; // End frameLayout
 
         // Create a frame layout (collapsible section) for the "Motion Lines" category
         frameLayout -label "Motion Lines" -collapsable true -collapse false;
             columnLayout -adjustableColumn true;
+                // Create a checkbox for toggling Motion Lines generation
+                // (assumed attribute name: smearControl1.generateMotionLines)
+                checkBox -label "Generate Motion Lines" generateMotionLinesCheckbox;
+                connectControl "generateMotionLinesCheckbox" "smearControl1.generateMotionLines";
+                
+                // Create a slider for Motion Lines Smooth Window
+                // (assumed attribute name: smearControl1.motionLinesCount)
+                intSliderGrp -label "Motion Lines Count:" -field true -min 0 -max 100 motionLinesCountlider;
+                connectControl "motionLinesCountlider" "smearControl1.motionLinesCount";
+                
                 // Create a slider for Motion Lines Past Strength 
                 // (assumed attribute name: smearControl1.motionLinesStrengthPast)
                 floatSliderGrp -label "Motion Lines Past Strength:" -field true -min 0 -max 5 motionLinesPastStrengthSlider;
@@ -181,11 +192,6 @@ MStatus executeMELScript() {
                 // (assumed attribute name: smearControl1.motionLinesSmoothWindow)
                 intSliderGrp -label "Motion Lines Smooth Window:" -field true -min 0 -max 5 motionLinesSmoothWindowSlider;
                 connectControl "motionLinesSmoothWindowSlider" "smearControl1.motionLinesSmoothWindow";
-
-                // Create a checkbox for toggling Motion Lines generation
-                // (assumed attribute name: smearControl1.generateMotionLines)
-                checkBox -label "Generate Motion Lines" generateMotionLinesCheckbox;
-                connectControl "generateMotionLinesCheckbox" "smearControl1.generateMotionLines";
             setParent ..;  // End inner columnLayout
         setParent ..;      // End frameLayout
 

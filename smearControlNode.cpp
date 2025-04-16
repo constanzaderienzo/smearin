@@ -17,6 +17,7 @@ MObject SmearControlNode::aElongationStrengthPast;
 MObject SmearControlNode::aElongationStrengthFuture;
 MObject SmearControlNode::aApplyElongation; 
 
+MObject SmearControlNode::aMotionLinesCount;
 MObject SmearControlNode::aMotionLinesStrengthPast; 
 MObject SmearControlNode::aMotionLinesStrengthFuture; 
 MObject SmearControlNode::aMotionLinesSmoothWindow; 
@@ -74,6 +75,15 @@ MStatus SmearControlNode::initialize() {
     nAttr.setStorable(true);
     nAttr.setKeyable(true);
     addAttribute(aApplyElongation); 
+
+    // Create elongationSmoothWindow attribute.
+    aMotionLinesCount = nAttr.create("motionLinesCount", "mlcnt", MFnNumericData::kInt, 15, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setMin(0);
+    nAttr.setMax(100);
+    nAttr.setStorable(true);
+    nAttr.setKeyable(true);
+    addAttribute(aMotionLinesCount);
 
     // Create motionLinesStrengthPast attribute.
     // Controls the length of the backward (trailing) elongation effect.

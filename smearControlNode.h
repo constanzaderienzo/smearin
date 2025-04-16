@@ -27,6 +27,7 @@ public:
     static MObject aElongationSmoothWindow; // Controls the size of the smoothing window.
     static MObject aApplyElongation; 
 
+    static MObject aMotionLinesCount; 
     static MObject aMotionLinesStrengthPast; // Controls the length of the backward (trailing) motion lines effect.
     static MObject aMotionLinesStrengthFuture; // Controls the length of the forward (leading) motion lines effect.
     static MObject aMotionLinesSmoothWindow; // Controls the size of the smoothing window.

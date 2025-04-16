@@ -1,6 +1,9 @@
 #include "motionLinesNode.h"
 #include "smear.h"
 #include "cylinder.h"    // Needed for CylinderMesh
+#include <numeric>
+#include <algorithm>
+#include <random>
 #include <maya/MFnUnitAttribute.h>
 #include <maya/MFnTypedAttribute.h>
 #include <maya/MFnNumericAttribute.h>
@@ -34,16 +37,11 @@ MObject MotionLinesNode::smoothEnabled;
 MObject MotionLinesNode::aStrengthPast;
 MObject MotionLinesNode::aStrengthFuture;
 MObject MotionLinesNode::aGenerateMotionLines;
+MObject MotionLinesNode::aMotionLinesCount; 
 MObject MotionLinesNode::inputControlMsg;  // Message attribute for connecting to the control node
 
-MStatus MotionLinesNode::selectSeeds(double density)
+MStatus MotionLinesNode::selectSeeds(int count)
 {
-    // Validate density is between 0 and 1
-    if (density < 0.0 || density > 1.0) {
-        MGlobal::displayWarning("Density out of range; defaulting to 0.1 (10%).");
-        density = 0.1;
-    }
-
     seedIndices.clear();
 
     // Retrieve the input mesh from the node’s attribute.
@@ -51,7 +49,7 @@ MStatus MotionLinesNode::selectSeeds(double density)
     MObject meshObj = meshPlug.asMObject();
     if (meshObj.isNull()) {
         MGlobal::displayError("Input mesh is null. Cannot select seed vertices.");
-        return MS::kFailure;
+            return MS::kFailure;
     }
 
     // Use MFnMesh to get vertex positions in world space.
@@ -60,29 +58,38 @@ MStatus MotionLinesNode::selectSeeds(double density)
     MStatus status = meshFn.getPoints(allVerts, MSpace::kWorld);
     if (!status) {
         MGlobal::displayError("Failed to retrieve points from the input mesh.");
-        return status;
+            return status;
     }
 
-    // Seed the random number generator.
-    srand(12345);
+    const int totalVerts = static_cast<int>(allVerts.length());
+    if (totalVerts == 0) {
+        MGlobal::displayError("Mesh has no vertices to select from.");
+            return MS::kFailure;
+    }
 
-    // Iterate over all vertices and randomly select based on the density.
-    for (unsigned int i = 0; i < allVerts.length(); i++) {
-        double randomVal = (double)rand() / (double)RAND_MAX;
-        if (randomVal < density) {
-            seedIndices.append((int)i);  // Record the vertex index as well.
-        }
+    // Cap the count to the number of available vertices
+    int numToSelect = std::min(count, totalVerts);
+
+    // Generate a list of all indices and shuffle it
+    std::vector<int> indices(totalVerts);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::shuffle(indices.begin(), indices.end(), std::default_random_engine(12345));
+
+    // Take the first 'numToSelect' unique indices
+    for (int i = 0; i < numToSelect; ++i) {
+        seedIndices.append(indices[i]);
     }
 
     return MS::kSuccess;
 }
 
 
+
 //-----------------------------------------------------------------
 // Constructors and Creator Function
 //-----------------------------------------------------------------
 MotionLinesNode::MotionLinesNode():
-    motionOffsets(), motionOffsetsBaked(false)
+    motionOffsets(), motionOffsetsBaked(false), cachedMotionLinesCount(0) 
 {}
 MotionLinesNode::~MotionLinesNode() {}
 
@@ -149,6 +156,13 @@ MStatus MotionLinesNode::initialize() {
     nAttr.setStorable(false);
     nAttr.setKeyable(false);
     addAttribute(aGenerateMotionLines);
+
+    // Elongation Smooth Window Size (integer slider)
+    aMotionLinesCount = nAttr.create("motionLinesCount", "mlcnt", MFnNumericData::kInt, 15, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setMin(0);
+    nAttr.setMax(100);
+    addAttribute(aMotionLinesCount);
 
     // Message attribute for connecting this node to the control node.
     inputControlMsg = mAttr.create("inputControlMessage", "icm", &status);
@@ -332,6 +346,20 @@ MObject MotionLinesNode::createReverseTris(const MFloatPointArray& points, MObje
 MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
     MStatus status;
 
+    MDataHandle genHandle = data.inputValue(aGenerateMotionLines, &status);
+    McheckErr(status, "Failed to obtain data handle for applyElongation");
+    bool genMotionLines = genHandle.asBool();
+    if (!genMotionLines) {
+        MFnMeshData meshData;
+        MObject newOutput = meshData.create(&status);
+        MDataHandle outputHandle = data.outputValue(aOutputMesh, &status);
+        CHECK_MSTATUS_AND_RETURN_IT(status);
+        outputHandle.set(newOutput);
+        data.setClean(plug);
+
+        return MS::kSuccess;
+    }
+
     // +++ Get time value +++
     MTime currentTime = data.inputValue(time, &status).asTime();
     McheckErr(status, "Failed to get time value");
@@ -374,13 +402,17 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kFailure;
     }
 
+    int motionLinesCount = data.inputValue(aMotionLinesCount).asInt();
+    if (cachedMotionLinesCount != motionLinesCount) {
+        selectSeeds(motionLinesCount);
+        cachedMotionLinesCount = motionLinesCount; 
+    }
+
     // +++ Compute motion offsets using Smear functions +++
     if (!motionOffsetsBaked) {
         status = Smear::computeMotionOffsetsSimple(shapePath, transformPath, motionOffsets);
-
-        // For now, hard code density but should be an attribute later
-        double lineDensity = 0.1;
-        selectSeeds(lineDensity);
+        
+        
 
         McheckErr(status, "Failed to compute motion offsets");
         motionOffsetsBaked = true;

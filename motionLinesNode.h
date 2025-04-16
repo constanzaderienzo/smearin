@@ -22,10 +22,11 @@ private:
     bool motionOffsetsBaked;
     
     // Stores motion line seed vertex indices
-    MIntArray seedIndices;;
+    MIntArray seedIndices;
+    int cachedMotionLinesCount; 
 
     // Selects seeds randomly 
-    MStatus selectSeeds(double density); 
+    MStatus selectSeeds(int count); 
 
 public:
     MotionLinesNode();
@@ -45,6 +46,7 @@ public:
     static MObject aStrengthPast;
     static MObject aStrengthFuture;
     static MObject aGenerateMotionLines;
+    static MObject aMotionLinesCount; 
 
     // Message attribute for connecting the control node.
     static MObject inputControlMsg;

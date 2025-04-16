@@ -23,8 +23,8 @@ MTypeId SmearDeformerNode::id(0x98530); // Random id
 MObject SmearDeformerNode::time;
 MObject SmearDeformerNode::smoothWindowSize;
 MObject SmearDeformerNode::smoothEnabled;
-MObject SmearDeformerNode::aStrength;
-
+MObject SmearDeformerNode::aStrengthPast;
+MObject SmearDeformerNode::aStrengthFuture; 
 
 SmearDeformerNode::SmearDeformerNode():
     motionOffsets(), motionOffsetsBaked(false)
@@ -56,11 +56,18 @@ MStatus SmearDeformerNode::initialize()
     numAttr.setMin(0);
     numAttr.setMax(5);
     addAttribute(smoothWindowSize);
-
-    aStrength = numAttr.create("strength", "s", MFnNumericData::kDouble, 1.5);
+    
+    // The length of the backward (trailing) elongation effect 
+    aStrengthPast = numAttr.create("Past Strength", "ps", MFnNumericData::kDouble, 1.5);
     numAttr.setMin(0);
     numAttr.setMax(5);
-    addAttribute(aStrength);
+    addAttribute(aStrengthPast);
+    
+    // The length of the forward (leading) elongation effect
+    aStrengthFuture = numAttr.create("Future Strength", "fs", MFnNumericData::kDouble, 1.5);
+    numAttr.setMin(0);
+    numAttr.setMax(5);
+    addAttribute(aStrengthFuture);
     
     return MS::kSuccess;
 }
@@ -146,7 +153,8 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     }
 
     // Artistic control param
-    const double strength = block.inputValue(aStrength).asDouble();
+    const double strengthPast = block.inputValue(aStrengthPast).asDouble();
+    const double strengthFuture = block.inputValue(aStrengthFuture).asDouble(); 
 
     MPoint point; 
     for (; !iter.isDone(); iter.next()) {
@@ -158,10 +166,15 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
 
         // Get motion offset and apply strength
         double offset = smoothedOffsets[vertIdx];
-        const double beta = offset * strength;
+
+        // Calculate the strength factor based on motion offset value 
+        double t1 = (offset + 1.) / 2.; // remaps motion offset from [-1, 1] to [0, 1] 
+        double interpolatedStrength = (1.0 - t1) * strengthPast + t1 * strengthFuture;
+
+        const double beta = offset * interpolatedStrength;
 
         const int frameOffset = static_cast<int>(floor(beta));
-        const double t = beta - frameOffset;
+        const double t2 = beta - frameOffset;
 
         const int baseFrame = frameIndex + frameOffset;
         // Clamp frame indices
@@ -176,7 +189,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
         const MPoint& p2 = trajectories[f2][vertIdx];
         const MPoint& p3 = trajectories[f3][vertIdx];
 
-        MPoint interpolated = SmearDeformerNode::catmullRomInterpolate(p0, p1, p2, p3, t);
+        MPoint interpolated = SmearDeformerNode::catmullRomInterpolate(p0, p1, p2, p3, t2);
 
         iter.setPosition(interpolated);
     }

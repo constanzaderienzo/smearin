@@ -68,7 +68,7 @@ MStatus initializePlugin(MObject obj) {
         status.perror("registerNode SmearDeformerNode");
         return status;
     }
-
+    return MStatus::kSuccess;
 }
 
 MStatus uninitializePlugin(MObject obj) {
@@ -86,4 +86,5 @@ MStatus uninitializePlugin(MObject obj) {
         status.perror("deregisterNode SmearDeformerNode");
         return status;
     }
+    return MStatus::kSuccess;
 }

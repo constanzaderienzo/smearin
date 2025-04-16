@@ -24,7 +24,8 @@ public:
     static MObject time;
     static MObject smoothWindowSize;
     static MObject smoothEnabled;
-    static MObject aStrength;
+    static MObject aStrengthPast;
+    static MObject aStrengthFuture; 
 
     SmearDeformerNode();
     ~SmearDeformerNode();

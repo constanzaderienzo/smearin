@@ -26,6 +26,7 @@ public:
     static MObject smoothEnabled;
     static MObject aStrengthPast;
     static MObject aStrengthFuture; 
+    static MObject aApplyElongation; 
 
     // Message attribute for connecting the control node.
     static MObject inputControlMsg;

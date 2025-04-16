@@ -99,34 +99,43 @@ MStatus executeMELScript() {
             // Connect the 'smoothWindow' attribute
             connectAttr ($controlNode + ".smoothWindow") ($deformerNode + ".smwin");
             
+            // Connect the 'applyElongation' attribute
+            connectAttr ($controlNode + ".applyElongation") ($deformerNode + ".apl");
+
             // Open the control panel window for editing node attributes
             smearControlGUI(); 
         }
 
-        global proc smearControlGUI() {
-            // Delete any existing window
-            if (`window -exists smearControlWindow`)
-                deleteUI smearControlWindow;
+    global proc smearControlGUI() {
+        // Delete any existing window
+        if (`window -exists smearControlWindow`)
+            deleteUI smearControlWindow;
 
-            // Create the main window for the control panel
-            window -title "Smear Control Panel" smearControlWindow;
+        // Create the main window for the control panel
+        window -title "Smear Control Panel" smearControlWindow;
+        columnLayout -adjustableColumn true;
+    
+        // Create a frame layout (collapsible section) for the "Elongated in-between" category
+        frameLayout -label "Elongated in-between" -collapsable true -collapse false;
             columnLayout -adjustableColumn true;
-    
-            // Create a slider for Past Strength (attribute smearControl1.sp)
-            floatSliderGrp -label "Past Strength:" -field true -min 0 -max 5 pastStrengthSlider;
-            connectControl "pastStrengthSlider" "smearControl1.sp";
-    
-            // Create a slider for Future Strength (attribute smearControl1.sf)
-            floatSliderGrp -label "Future Strength:" -field true -min 0 -max 5 futureStrengthSlider;
-            connectControl "futureStrengthSlider" "smearControl1.sf";
-    
-            // Create a slider for Smooth Window (attribute smearControl1.sw)
-            intSliderGrp -label "Smooth Window:" -field true -min 0 -max 5 smoothWindowSlider;
-            connectControl "smoothWindowSlider" "smearControl1.sw";
-    
-            // Show the window so it's visible
-            showWindow smearControlWindow;
-        }
+                // Create a slider for Past Strength (attribute smearControl1.sp)
+                floatSliderGrp -label "Past Strength:" -field true -min 0 -max 5 pastStrengthSlider;
+                connectControl "pastStrengthSlider" "smearControl1.sp";
+
+                // Create a slider for Future Strength (attribute smearControl1.sf)
+                floatSliderGrp -label "Future Strength:" -field true -min 0 -max 5 futureStrengthSlider;
+                connectControl "futureStrengthSlider" "smearControl1.sf";
+
+                // Create a slider for Smooth Window (attribute smearControl1.sw)
+                intSliderGrp -label "Smooth Window:" -field true -min 0 -max 5 smoothWindowSlider;
+                connectControl "smoothWindowSlider" "smearControl1.sw";
+            setParent ..; // End inner columnLayout
+        setParent ..; // End frameLayout
+
+        // Show the window so it's visible
+        showWindow smearControlWindow;
+    }
+
     )";
 
 

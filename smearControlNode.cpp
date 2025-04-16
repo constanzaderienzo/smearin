@@ -15,6 +15,7 @@ MTypeId SmearControlNode::id(0x98523); // Random id
 MObject SmearControlNode::aSmoothWindow;
 MObject SmearControlNode::aStrengthPast;
 MObject SmearControlNode::aStrengthFuture;
+MObject SmearControlNode::aApplyElongation; 
 MObject SmearControlNode::aControlMsg;
 
 SmearControlNode::SmearControlNode()
@@ -61,6 +62,12 @@ MStatus SmearControlNode::initialize() {
     nAttr.setStorable(true);
     nAttr.setKeyable(true);
     addAttribute(aSmoothWindow);
+
+    // Create the boolean attribute for applying elongation.
+    aApplyElongation = nAttr.create("applyElongation", "apl", MFnNumericData::kBoolean, true, &status);
+    nAttr.setStorable(true);
+    nAttr.setKeyable(true);
+    addAttribute(aApplyElongation);
 
     // Create and add a message attribute.
     aControlMsg = mAttr.create("controlMessage", "ctrlMsg", &status);

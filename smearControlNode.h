@@ -25,6 +25,7 @@ public:
     static MObject aStrengthPast; // Controls the length of the backward (trailing) elongation effect.
     static MObject aStrengthFuture; // Controls the length of the forward (leading) elongation effect.
     static MObject aSmoothWindow; // Controls the size of the smoothing window.
+    static MObject aApplyElongation; 
 
     // Message attribute to connect to the deformer node.
     static MObject aControlMsg;

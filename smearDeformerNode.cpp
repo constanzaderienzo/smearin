@@ -26,6 +26,7 @@ MObject SmearDeformerNode::smoothWindowSize;
 MObject SmearDeformerNode::smoothEnabled;
 MObject SmearDeformerNode::aStrengthPast;
 MObject SmearDeformerNode::aStrengthFuture; 
+MObject SmearDeformerNode::aApplyElongation;
 
 // Message attribute for connecting to the control node.
 MObject SmearDeformerNode::inputControlMsg;
@@ -74,6 +75,12 @@ MStatus SmearDeformerNode::initialize()
     numAttr.setMax(5);
     addAttribute(aStrengthFuture);
 
+    // Create the boolean attribute for applying elongation.
+    aApplyElongation = numAttr.create("applyElongation", "apl", MFnNumericData::kBoolean, true, &status);
+    numAttr.setStorable(false);
+    numAttr.setKeyable(false);
+    addAttribute(aApplyElongation);
+
     // Create the message attribute that will connect this deformer to the control node.
     inputControlMsg = mAttr.create("inputControlMessage", "icm", &status);
     mAttr.setStorable(false);
@@ -87,6 +94,14 @@ MStatus SmearDeformerNode::initialize()
 MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
 {
     MStatus status; 
+    
+    MDataHandle applyHandle = block.inputValue(aApplyElongation, &status);
+    McheckErr(status, "Failed to obtain data handle for applyElongation");
+    bool applyElongation = applyHandle.asBool();
+    if (!applyElongation) {
+        // Do nothing if elongation is disabled.
+        return MS::kSuccess;
+    }
 
     MDataHandle timeDataHandle = block.inputValue(time, &status); 
     McheckErr(status, "Failed to obtain data handle for time input"); 

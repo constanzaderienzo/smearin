@@ -17,7 +17,7 @@ class MotionLinesNode : public MPxNode
 private: 
     // Caches motion offsets for simlpe objects. 
     // TODO: Add a way to cache motion offsets for non-simple objects
-    MotionOffsetsSimple motionOffsetsSimple;
+    MotionOffsetsSimple motionOffsets;
     // Tracks whether motion offsets are baked to avoid recomputation of offsets every frame
     bool motionOffsetsBaked;
     
@@ -40,10 +40,10 @@ public:
     static MObject time;
     static MObject aInputMesh;
     static MObject aOutputMesh;
-    static MObject elongationSmoothWindowSize;
+    static MObject smoothWindowSize;
     static MObject smoothEnabled;
-    static MObject aelongationStrengthPast;
-    static MObject aelongationStrengthFuture;
+    static MObject aStrengthPast;
+    static MObject aStrengthFuture;
     static MObject aGenerateMotionLines;
 
     // Message attribute for connecting the control node.

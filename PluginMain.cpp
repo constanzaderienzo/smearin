@@ -106,6 +106,7 @@ MStatus executeMELScript() {
             // Create transform and mesh that we will use to output motion lines mesh
             createNode transform -n MotionLines1;
             createNode mesh -n MotionLinesShape1 -p MotionLines1;
+            sets -add initialShadingGroup MotionLinesShape1;
             
             string $motionLinesNode = "MotionLinesNode1";
 

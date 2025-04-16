@@ -29,10 +29,10 @@ MTypeId MotionLinesNode::id(0x98534); // Random id
 MObject MotionLinesNode::time;
 MObject MotionLinesNode::aInputMesh;
 MObject MotionLinesNode::aOutputMesh;
-MObject MotionLinesNode::elongationSmoothWindowSize;
+MObject MotionLinesNode::smoothWindowSize;
 MObject MotionLinesNode::smoothEnabled;
-MObject MotionLinesNode::aelongationStrengthPast;
-MObject MotionLinesNode::aelongationStrengthFuture;
+MObject MotionLinesNode::aStrengthPast;
+MObject MotionLinesNode::aStrengthFuture;
 MObject MotionLinesNode::aGenerateMotionLines;
 MObject MotionLinesNode::inputControlMsg;  // Message attribute for connecting to the control node
 
@@ -82,7 +82,7 @@ MStatus MotionLinesNode::selectSeeds(double density)
 // Constructors and Creator Function
 //-----------------------------------------------------------------
 MotionLinesNode::MotionLinesNode():
-    motionOffsetsSimple(), motionOffsetsBaked(false)
+    motionOffsets(), motionOffsetsBaked(false)
 {}
 MotionLinesNode::~MotionLinesNode() {}
 
@@ -114,7 +114,6 @@ MStatus MotionLinesNode::initialize() {
     // Output mesh attribute
     aOutputMesh = tAttr.create("outputMesh", "out", MFnData::kMesh, MObject::kNullObj, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
-    tAttr.setStorable(false);
     addAttribute(aOutputMesh);
 
 
@@ -124,25 +123,25 @@ MStatus MotionLinesNode::initialize() {
     addAttribute(smoothEnabled);
 
     // Elongation Smooth Window Size (integer slider)
-    elongationSmoothWindowSize = nAttr.create("elongationSmoothWindow", "smwin", MFnNumericData::kInt, 2, &status);
+    smoothWindowSize = nAttr.create("smoothWindow", "smwin", MFnNumericData::kInt, 2, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
     nAttr.setMin(0);
     nAttr.setMax(5);
-    addAttribute(elongationSmoothWindowSize);
+    addAttribute(smoothWindowSize);
 
     // The length of the backward (trailing) elongation effect 
-    aelongationStrengthPast = nAttr.create("Past Strength", "ps", MFnNumericData::kDouble, 1.5, &status);
+    aStrengthPast = nAttr.create("strengthPast", "ps", MFnNumericData::kDouble, 1.5, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
     nAttr.setMin(0);
     nAttr.setMax(5);
-    addAttribute(aelongationStrengthPast);
+    addAttribute(aStrengthPast);
 
     // The length of the forward (leading) elongation effect
-    aelongationStrengthFuture = nAttr.create("Future Strength", "fs", MFnNumericData::kDouble, 1.5, &status);
+    aStrengthFuture = nAttr.create("strengthFuture", "fs", MFnNumericData::kDouble, 1.5, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
     nAttr.setMin(0);
     nAttr.setMax(5);
-    addAttribute(aelongationStrengthFuture);
+    addAttribute(aStrengthFuture);
 
     // Boolean attribute for applying motion lines generation.
     aGenerateMotionLines = nAttr.create("generateMotionLines", "gen", MFnNumericData::kBoolean, true, &status);
@@ -161,9 +160,9 @@ MStatus MotionLinesNode::initialize() {
     attributeAffects(aInputMesh, aOutputMesh);
     attributeAffects(time, aOutputMesh);
     attributeAffects(smoothEnabled, aOutputMesh);
-    attributeAffects(elongationSmoothWindowSize, aOutputMesh);
-    attributeAffects(aelongationStrengthPast, aOutputMesh);
-    attributeAffects(aelongationStrengthFuture, aOutputMesh);
+    attributeAffects(smoothWindowSize, aOutputMesh);
+    attributeAffects(aStrengthPast, aOutputMesh);
+    attributeAffects(aStrengthFuture, aOutputMesh);
     attributeAffects(aGenerateMotionLines, aOutputMesh);
     attributeAffects(inputControlMsg, aOutputMesh);
 
@@ -347,7 +346,7 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kFailure;
     }
 
-    // Create new mesh data
+    // Create new mesh data container
     MFnMeshData meshData;
     MObject newOutput = meshData.create(&status);
     McheckErr(status, "Failed to create output mesh container");
@@ -363,9 +362,9 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
 
     MDagPath shapePath, transformPath;
     status = Smear::getDagPathsFromInputMesh(inputObj, inputPlug, transformPath, shapePath);
-    McheckErr(status, "Failed to tranform path and shape path from input object");
+    McheckErr(status, "Failed to transform path and shape path from input object");
 
-    // Cast copied Mesh into MfnMesh
+    // Cast copied Mesh into MFnMesh
     MFnMesh outputFn(copiedMesh, &status);
     McheckErr(status, "Output mesh init failed");
 
@@ -377,31 +376,180 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
 
     // +++ Compute motion offsets using Smear functions +++
     if (!motionOffsetsBaked) {
-        status = Smear::computeMotionOffsetsSimple(shapePath, transformPath, motionOffsetsSimple);
+        status = Smear::computeMotionOffsetsSimple(shapePath, transformPath, motionOffsets);
 
-        // For now, hard code density but should be an attrib later
-        double lineDensity = 0.1; 
+        // For now, hard code density but should be an attribute later
+        double lineDensity = 0.1;
         selectSeeds(lineDensity);
 
         McheckErr(status, "Failed to compute motion offsets");
         motionOffsetsBaked = true;
     }
 
-    int frameIndex = static_cast<int>(frame - motionOffsetsSimple.startFrame);
+    int frameIndex = static_cast<int>(frame - motionOffsets.startFrame);
 
-    //MGlobal::displayInfo("Current frame: " + MString() + frame +
-    //    " Start frame: " + motionOffsetsSimple.startFrame +
-    //    " Frame index: " + frameIndex);
-
-    if (frameIndex < 0 || frameIndex >= motionOffsetsSimple.motionOffsets.size()) {
+    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
         return MS::kSuccess;
     }
 
-    MDoubleArray& currentFrameOffsets = motionOffsetsSimple.motionOffsets[frameIndex];
-    if (currentFrameOffsets.length() != numVertices) {
-        MGlobal::displayError("Offset/vertex count mismatch");
-        return MS::kFailure;
+    // --- Commented out actual motion lines generation ---
+    const MDoubleArray& offsets = motionOffsets.motionOffsets[frameIndex];
+    const std::vector<MPointArray>& trajectories = motionOffsets.vertexTrajectories;
+    const int numFrames = trajectories.size();
+
+    // Compute smoothed offsets, etc.
+    const bool smoothingEnabled = data.inputValue(smoothEnabled).asBool();
+    const int N = smoothingEnabled ? data.inputValue(smoothWindowSize).asInt() : 0;
+    std::vector<double> smoothedOffsets(offsets.length(), 0.0);
+    for (int vertIdx = 0; vertIdx < offsets.length(); ++vertIdx) {
+        double totalWeight = 0.0;
+        double smoothed = 0.0;
+        for (int n = -N; n <= N; ++n) {
+            const int frame = frameIndex + n;
+            if (frame < 0 || frame >= motionOffsets.motionOffsets.size()) continue;
+            const double normalized = std::abs(n) / static_cast<double>(N + 1);
+            const double weight = std::pow(1.0 - std::pow(normalized, 2.0), 2.0);
+            smoothed += motionOffsets.motionOffsets[frame][vertIdx] * weight;
+            totalWeight += weight;
+        }
+        smoothedOffsets[vertIdx] = totalWeight > 0.0 ? smoothed / totalWeight : offsets[vertIdx];
     }
+
+    MPointArray mlPoints;
+    MIntArray mlFaceCounts;
+    MIntArray mlFaceConnects;
+
+    // Artistic control param
+    const double strengthPast = data.inputValue(aStrengthPast).asDouble();
+    const double strengthFuture = data.inputValue(aStrengthFuture).asDouble();
+    const int segmentCount = 3;  
+    const double cylinderRadius = 0.05;
+
+    for (unsigned int s = 0; s < seedIndices.length(); s++) {
+        int vertexIndex = seedIndices[s];
+
+        // Get the smoothed offset for this vertex.
+        double offset = smoothedOffsets[vertexIndex];
+
+        // Determine sampling direction:
+        // +1 for positive (leading) offsets, -1 for negative (trailing) offsets.
+        int direction = (offset >= 0.0) ? 1 : -1;
+
+        // Determine the appropriate motion line strength factor.
+        // These are assumed to be parameters from your node.
+        double strengthFactor = (offset >= 0.0) ? strengthFuture : strengthPast;
+
+        // Build a polyline along the vertex's trajectory.
+        // Instead of sampling consecutive frames, multiply the segment index by the strength factor.
+        MPointArray polyLine;
+        for (int seg = 0; seg <= segmentCount; seg++) {
+            // Calculate a frame increment scaled by the strength factor.
+            int frameIncrement = static_cast<int>(round(seg * strengthFactor));
+            int sampleFrame = frameIndex + frameIncrement * direction;
+            if (sampleFrame < 0 || sampleFrame >= numFrames)
+                break;
+            polyLine.append(trajectories[sampleFrame][vertexIndex]);
+        }
+
+        // Create cylinder segments between consecutive polyline points.
+        for (unsigned int j = 0; j < polyLine.length() - 1; j++) {
+            status = appendCylinder(polyLine[j], polyLine[j + 1],
+                mlPoints, mlFaceCounts, mlFaceConnects);
+            if (status != MS::kSuccess) {
+                MGlobal::displayError("Failed to append cylinder for motion line segment.");
+                return status;
+            }
+        }
+    }
+
+    MFnMesh meshFn;
+    MObject motionLinesMesh = meshFn.create(mlPoints.length(), mlFaceCounts.length(),
+                            mlPoints, mlFaceCounts, mlFaceConnects, newOutput, &status);
+    if (status != MS::kSuccess) {
+        MGlobal::displayError("Motion lines mesh creation failed.");
+        return status;
+    }
+
+    MDataHandle outputHandle = data.outputValue(aOutputMesh, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    outputHandle.set(newOutput);
+    data.setClean(plug);
 
     return MS::kSuccess;
 }
+
+//MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
+//    MStatus status;
+//
+//    // +++ Get time value +++
+//    MTime currentTime = data.inputValue(time, &status).asTime();
+//    McheckErr(status, "Failed to get time value");
+//    double frame = currentTime.as(MTime::kFilm);  // Get time in frames
+//
+//    // --- Get the input mesh (even though we won’t be using it, we check it for validity) ---
+//    MDataHandle inputHandle = data.inputValue(aInputMesh, &status);
+//    McheckErr(status, "Failed to get input mesh");
+//    MObject inputObj = inputHandle.asMesh();
+//    if (inputObj.isNull() || !inputObj.hasFn(MFn::kMesh)) {
+//        MGlobal::displayError("Input is not a valid mesh");
+//        return MS::kFailure;
+//    }
+//
+//    // Create new mesh data container
+//    MFnMeshData meshData;
+//    MObject newOutput = meshData.create(&status);
+//    McheckErr(status, "Failed to create output mesh container");
+//
+//    // --- For debugging, create a cube mesh and output that ---
+//
+//    // Define cube vertices (a cube centered at origin, edge length 2)
+//    MPointArray cubePoints;
+//    cubePoints.append(MPoint(-1.0, -1.0, -1.0));  // 0
+//    cubePoints.append(MPoint(1.0, -1.0, -1.0));  // 1
+//    cubePoints.append(MPoint(1.0, 1.0, -1.0));  // 2
+//    cubePoints.append(MPoint(-1.0, 1.0, -1.0));  // 3
+//    cubePoints.append(MPoint(-1.0, -1.0, 1.0));  // 4
+//    cubePoints.append(MPoint(1.0, -1.0, 1.0));  // 5
+//    cubePoints.append(MPoint(1.0, 1.0, 1.0));  // 6
+//    cubePoints.append(MPoint(-1.0, 1.0, 1.0));  // 7
+//
+//    // Define face counts: 6 faces, each with 4 vertices.
+//    MIntArray cubeFaceCounts;
+//    for (int i = 0; i < 6; i++) {
+//        cubeFaceCounts.append(4);
+//    }
+//
+//    // Define face connectivity.
+//    // Front face (z = -1): vertices 0,1,2,3
+//    // Back face (z = 1): vertices 4,5,6,7
+//    // Top face (y = 1): vertices 3,2,6,7
+//    // Bottom face (y = -1): vertices 0,1,5,4
+//    // Left face (x = -1): vertices 0,3,7,4
+//    // Right face (x = 1): vertices 1,2,6,5
+//    MIntArray cubeFaceConnects;
+//    cubeFaceConnects.append(0); cubeFaceConnects.append(1); cubeFaceConnects.append(2); cubeFaceConnects.append(3);  // Front
+//    cubeFaceConnects.append(4); cubeFaceConnects.append(5); cubeFaceConnects.append(6); cubeFaceConnects.append(7);  // Back
+//    cubeFaceConnects.append(3); cubeFaceConnects.append(2); cubeFaceConnects.append(6); cubeFaceConnects.append(7);  // Top
+//    cubeFaceConnects.append(0); cubeFaceConnects.append(1); cubeFaceConnects.append(5); cubeFaceConnects.append(4);  // Bottom
+//    cubeFaceConnects.append(0); cubeFaceConnects.append(3); cubeFaceConnects.append(7); cubeFaceConnects.append(4);  // Left
+//    cubeFaceConnects.append(1); cubeFaceConnects.append(2); cubeFaceConnects.append(6); cubeFaceConnects.append(5);  // Right
+//
+//    // Create cube mesh using the defined arrays
+//    MFnMesh meshFn;
+//    MObject cubeMesh = meshFn.create(cubePoints.length(), cubeFaceCounts.length(),
+//        cubePoints, cubeFaceCounts, cubeFaceConnects,
+//        newOutput, &status);
+//    if (status != MS::kSuccess) {
+//        MGlobal::displayError("Cube mesh creation failed.");
+//        return status;
+//    }
+//
+//    // --- Debug: set output to debug cube mesh ---
+//    MDataHandle outputHandle = data.outputValue(aOutputMesh, &status);
+//    CHECK_MSTATUS_AND_RETURN_IT(status);
+//    outputHandle.set(newOutput);
+//    data.setClean(plug);
+//
+//    return MS::kSuccess;
+//}
+//

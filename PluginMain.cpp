@@ -12,6 +12,7 @@
 #include "smear.h"
 #include "smearNode.h"
 #include "smearDeformerNode.h"
+#include "smearControlNode.h"
 
 class PluginMain : public MPxCommand {
 private: 
@@ -68,6 +69,18 @@ MStatus initializePlugin(MObject obj) {
         status.perror("registerNode SmearDeformerNode");
         return status;
     }
+
+    status = plugin.registerNode(
+        "SmearControlNode",             // Node name used in Maya
+        SmearControlNode::id,           // MTypeId
+        SmearControlNode::creator,      // Creator function
+        SmearControlNode::initialize   // Initialize function
+    );
+
+    if (!status) {
+        status.perror("registerNode SmearControlNode");
+        return status;
+    }
     return MStatus::kSuccess;
 }
 
@@ -86,5 +99,12 @@ MStatus uninitializePlugin(MObject obj) {
         status.perror("deregisterNode SmearDeformerNode");
         return status;
     }
+
+    status = plugin.deregisterNode(SmearControlNode::id);
+    if (!status) {
+        status.perror("deregisterNode SmearControlNode");
+        return status;
+    }
+
     return MStatus::kSuccess;
 }

@@ -4,6 +4,7 @@
 #include <maya/MFnUnitAttribute.h>
 #include <maya/MFnTypedAttribute.h>
 #include <maya/MFnNumericAttribute.h>
+#include <maya/MFnMessageAttribute.h>
 #include <maya/MStatus.h>
 #include <maya/MGlobal.h>
 #include <maya/MDagPathArray.h>
@@ -26,6 +27,9 @@ MObject SmearDeformerNode::smoothEnabled;
 MObject SmearDeformerNode::aStrengthPast;
 MObject SmearDeformerNode::aStrengthFuture; 
 
+// Message attribute for connecting to the control node.
+MObject SmearDeformerNode::inputControlMsg;
+
 SmearDeformerNode::SmearDeformerNode():
     motionOffsets(), motionOffsetsBaked(false)
 {}
@@ -43,6 +47,7 @@ MStatus SmearDeformerNode::initialize()
     MFnNumericAttribute numAttr;
     MFnUnitAttribute unitAttr;
     MFnTypedAttribute typedAttr;
+    MFnMessageAttribute mAttr;  // For message attributes
     MStatus status;
 
     // Time attribute
@@ -68,6 +73,13 @@ MStatus SmearDeformerNode::initialize()
     numAttr.setMin(0);
     numAttr.setMax(5);
     addAttribute(aStrengthFuture);
+
+    // Create the message attribute that will connect this deformer to the control node.
+    inputControlMsg = mAttr.create("inputControlMessage", "icm", &status);
+    mAttr.setStorable(false);
+    mAttr.setKeyable(false);
+    addAttribute(inputControlMsg);
+
     
     return MS::kSuccess;
 }

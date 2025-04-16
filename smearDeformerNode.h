@@ -27,6 +27,9 @@ public:
     static MObject aStrengthPast;
     static MObject aStrengthFuture; 
 
+    // Message attribute for connecting the control node.
+    static MObject inputControlMsg;
+
     SmearDeformerNode();
     ~SmearDeformerNode();
     

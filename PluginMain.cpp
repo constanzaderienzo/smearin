@@ -98,6 +98,34 @@ MStatus executeMELScript() {
 
             // Connect the 'smoothWindow' attribute
             connectAttr ($controlNode + ".smoothWindow") ($deformerNode + ".smwin");
+            
+            // Open the control panel window for editing node attributes
+            smearControlGUI(); 
+        }
+
+        global proc smearControlGUI() {
+            // Delete any existing window
+            if (`window -exists smearControlWindow`)
+                deleteUI smearControlWindow;
+
+            // Create the main window for the control panel
+            window -title "Smear Control Panel" smearControlWindow;
+            columnLayout -adjustableColumn true;
+    
+            // Create a slider for Past Strength (attribute smearControl1.sp)
+            floatSliderGrp -label "Past Strength:" -field true -min 0 -max 5 pastStrengthSlider;
+            connectControl "pastStrengthSlider" "smearControl1.sp";
+    
+            // Create a slider for Future Strength (attribute smearControl1.sf)
+            floatSliderGrp -label "Future Strength:" -field true -min 0 -max 5 futureStrengthSlider;
+            connectControl "futureStrengthSlider" "smearControl1.sf";
+    
+            // Create a slider for Smooth Window (attribute smearControl1.sw)
+            intSliderGrp -label "Smooth Window:" -field true -min 0 -max 5 smoothWindowSlider;
+            connectControl "smoothWindowSlider" "smearControl1.sw";
+    
+            // Show the window so it's visible
+            showWindow smearControlWindow;
         }
     )";
 
@@ -110,15 +138,18 @@ MStatus executeMELScript() {
 
     MGlobal::executeCommand(R"(
         global string $gMainWindow;
-        if (`menu -exists myPluginMenu`) {
-            deleteUI myPluginMenu;
+        if (`menu -exists smearinMenu`) {
+            deleteUI smearinMenu;
         }
         setParent $gMainWindow;
-        menu -label "My Plugin" -tearOff true myPluginMenu;
+        menu -label "SMEARin" -tearOff true smearinMenu;
+
+        // Create a new shelf button that calls createSmearRelatedNodes()
         menuItem 
-            -label "Open LSystem Dialog" 
-            -command "applySmearGUI"  
-            myPluginMenu;
+            -label "Apply Smear"
+            -annotation "Apply Smear to selected object" 
+            -command "createSmearRelatedNodes"
+            applySmearMenu;
     )");
 
     return status;

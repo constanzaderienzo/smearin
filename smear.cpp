@@ -73,7 +73,7 @@ MStatus Smear::extractAnimationFrameRange(const MDagPath & transformPath, double
         return MS::kFailure;
     }
 
-    MGlobal::displayInfo("extractAnimationFrameRange::startFrame: " + MString() + startFrame + " endFrame: " + endFrame);
+    //MGlobal::displayInfo("extractAnimationFrameRange::startFrame: " + MString() + startFrame + " endFrame: " + endFrame);
 
     return MS::kSuccess;
 }
@@ -362,7 +362,7 @@ MStatus Smear::calculatePerFrameMotionOffsets(const MPointArray& objectSpaceVert
         motionOffsets[i] = std::max(-1.0, std::min(1.0, motionOffsets[i]));
         //MGlobal::displayInfo(MString("Motion Offset Post: ") + motionOffsets[i]);
     }
-    MGlobal::displayInfo("Smear::calculatePerFrameMotionOffsets - completed!");
+    //MGlobal::displayInfo("Smear::calculatePerFrameMotionOffsets - completed!");
     return MS::kSuccess; 
 }
 
@@ -372,8 +372,8 @@ MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& tra
     // 1. Set up frame evaluation context
     MTime evalTime(frame, MTime::kFilm);
     MDGContext ctx(evalTime);
-    MGlobal::displayInfo(MString("Evaluating frame: ") + frame +
-        " at time: " + evalTime.as(MTime::uiUnit()));
+    //MGlobal::displayInfo(MString("Evaluating frame: ") + frame +
+        //" at time: " + evalTime.as(MTime::uiUnit()));
 
     // 2. Get worldMatrix array plug
     MFnDependencyNode transformFn(transformPath.node());
@@ -446,18 +446,14 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
         return MS::kFailure; // Not a transform node.
     }
 
-    MGlobal::displayInfo("Both shapePath and transformPath point to their respective nodes!");
 
     // Find the start and end frame to determine the range for which we compute trajectory 
     double startFrame = -1;
     double endFrame = -1;
     status = extractAnimationFrameRange(transformPath, startFrame, endFrame);
-    MGlobal::displayInfo("Smear::computeCentroidTrajectory - startframe: " + MString() + startFrame + " endFrame: " + endFrame);
     McheckErr(status, "Failed to extract animation frame range.");
     motionOffsets.startFrame = startFrame;
     motionOffsets.endFrame = endFrame;
-
-    MGlobal::displayInfo(MString("Start Frame: ") + startFrame + MString("End Frame: ") + endFrame);
 
     // Parse all the transformations from each frame to see how the pivot moves from animation 
     std::vector<MTransformationMatrix> transformationMatrices;
@@ -492,20 +488,12 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
     McheckErr(status, "computeMotionOffsetsSimple: Failed to create MFnMesh.");
     int numVertices = meshFn.numVertices();
 
-    MGlobal::displayInfo(MString("Num Frames: ") + numFrames);
-
-    for (int i = 0; i < centroidVelocities.size() ; ++i) {
-        MGlobal::displayInfo("Frame: " + i);
-        MGlobal::displayInfo("Centroid position: " + MString() + centroidPositions[i].x + " " + centroidPositions[i].y + " " + centroidPositions[i].z);
-        MGlobal::displayInfo("Centroid velocity: " + MString() + centroidVelocities[i].x + " " + centroidVelocities[i].y + " " + centroidPositions[i].z);
-    }
-
     // These object space vertices will be transformed into world space verteices later
     MPointArray objectSpaceVertices;
     status = meshFn.getPoints(objectSpaceVertices, MSpace::kObject);
     McheckErr(status, "Smear::computeMotionOffsetsSimple - Failed to get object space vertex positions");
     
-    MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Num Frames frame:" + MString() + numFrames);
+    //MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Num Frames frame:" + MString() + numFrames);
 
     // Store vertex trajectories
     motionOffsets.vertexTrajectories.resize(numFrames);
@@ -513,7 +501,7 @@ MStatus Smear::computeMotionOffsetsSimple(const MDagPath& shapePath, const MDagP
 
     // Iterate through each frame to find motion offsets for each frame
     for (int frame = 0; frame < numFrames; ++frame) {
-        MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Current frame:" + MString() + frame);
+        //MGlobal::displayInfo("Smear::computeMotionOffsetsSimple - Current frame:" + MString() + frame);
 
         status = getVerticesAtFrame(shapePath, transformPath, startFrame + frame, vertices);
         McheckErr(status, "Failed to get world-space vertices");

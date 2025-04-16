@@ -108,8 +108,8 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     MDagPath meshPath, transformPath;
     status = Smear::getDagPathsFromInputMesh(meshObj, inputPlug, transformPath, meshPath);
 
-    MGlobal::displayInfo(MString("Mesh path: ") + meshPath.fullPathName());
-    MGlobal::displayInfo(MString("Transform path: ") + transformPath.fullPathName());
+    //MGlobal::displayInfo(MString("Mesh path: ") + meshPath.fullPathName());
+    //MGlobal::displayInfo(MString("Transform path: ") + transformPath.fullPathName());
 
     // Check if the provided path point to correct node types.
     if (!meshPath.hasFn(MFn::kMesh)) {

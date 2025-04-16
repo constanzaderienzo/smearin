@@ -41,6 +41,89 @@ public:
     }
 };
 
+MStatus executeMELScript() {
+    MStatus status;
+
+    const char* melScript = R"(
+        global proc applySmearGUI() {
+            // Delete any existing window
+            if (`window -exists applySmearWindow`)
+                deleteUI applySmearWindow;
+
+            // Create the main window for the control panel
+            window -title "Apply Smear" applySmearWindow;
+            columnLayout -adjustableColumn true;
+
+            // Add a button that calls createSmearRelatedNodes()
+            button -label "Create Smear Nodes" -command ("createSmearRelatedNodes") createSmearButton;
+            showWindow applySmearWindow;
+        }
+
+        // New procedure for creating the Nodes required for SMEAR
+        global proc createSmearRelatedNodes() {
+            // Get the currently selected object(s)
+            string $sel[] = `ls -sl`;
+            if (size($sel) == 0) {
+                error "No object selected. Please select an object before running createSmearRelatedNodes().";
+            }
+            string $target = $sel[0];
+
+            // Create the deformer node on the selected object using the custom deformer type
+            string $deformerNodes[] = `deformer -type "SmearDeformerNode" $target`;
+            string $deformerNode = $deformerNodes[0];
+
+            // Connect the scene time to the deformer node's time attribute
+            connectAttr "time1.outTime" ($deformerNode + ".time");
+
+            // Create the control node (SmearControlNode)
+            string $controlNode = `createNode SmearControlNode -name "smearControl1"`;
+
+            // Connect the message attribute from the control node to the deformer node.
+            // (Assuming the control node defines a message attribute named "controlMessage"
+            // and the deformer node defines its corresponding message attribute as "inputControlMessage")
+            connectAttr -force ($controlNode + ".controlMessage") ($deformerNode + ".inputControlMessage");
+
+            // Optionally, you may want to drive the numeric attributes directly:
+            // Here we assume the control node's numeric attributes are:
+            //    "strengthPast" with short name "sp"
+            //    "strengthFuture" with short name "sf"
+            //    "smoothWindow" with short name "sw"
+            // And the deformer node's corresponding attributes have short names "ps", "fs", and "smwin"
+
+            // Connect the 'strengthPast' attribute
+            connectAttr ($controlNode + ".strengthPast") ($deformerNode + ".ps");
+
+            // Connect the 'strengthFuture' attribute
+            connectAttr ($controlNode + ".strengthFuture") ($deformerNode + ".fs");
+
+            // Connect the 'smoothWindow' attribute
+            connectAttr ($controlNode + ".smoothWindow") ($deformerNode + ".smwin");
+        }
+    )";
+
+
+    // Execute the MEL script
+    status = MGlobal::executeCommand(melScript);
+    if (status != MS::kSuccess) {
+        cerr << "Error executing MEL script!" << endl;
+    }
+
+    MGlobal::executeCommand(R"(
+        global string $gMainWindow;
+        if (`menu -exists myPluginMenu`) {
+            deleteUI myPluginMenu;
+        }
+        setParent $gMainWindow;
+        menu -label "My Plugin" -tearOff true myPluginMenu;
+        menuItem 
+            -label "Open LSystem Dialog" 
+            -command "applySmearGUI"  
+            myPluginMenu;
+    )");
+
+    return status;
+}
+
 // Plugin registration
 MStatus initializePlugin(MObject obj) {
     MStatus   status = MStatus::kSuccess;
@@ -81,6 +164,10 @@ MStatus initializePlugin(MObject obj) {
         status.perror("registerNode SmearControlNode");
         return status;
     }
+
+    // Adds plugin related GUI to the Maya toolbar
+    executeMELScript();
+
     return MStatus::kSuccess;
 }
 

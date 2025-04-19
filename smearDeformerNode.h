@@ -47,6 +47,8 @@ public:
         MItGeometry& iter,
         const MMatrix& localToWorldMatrix,
         unsigned int multiIndex) override;
+    MStatus deformSimple(MDataBlock& block, MItGeometry it, unsigned int multiIndex);
+    MStatus deformArticulated(MDataBlock& block, MItGeometry it, unsigned int multiIndex);
 
 private:
     MotionOffsetsSimple motionOffsets;

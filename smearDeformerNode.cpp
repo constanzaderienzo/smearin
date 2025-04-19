@@ -95,21 +95,16 @@ MStatus SmearDeformerNode::initialize()
     return MS::kSuccess;
 }
 
-MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
-{
-    MStatus status; 
-       
+MStatus SmearDeformerNode::deformSimple(MDataBlock& block, MItGeometry it, unsigned int multiIndex) {
+    return MStatus::kSuccess;
+}
+MStatus SmearDeformerNode::deformArticulated(MDataBlock& block, MItGeometry iter, unsigned int multiIndex) {
+    MStatus status;
+
     MArrayDataHandle hInputArray = block.inputArrayValue(input, &status);
     if (!status) {
         MGlobal::displayError("Failed to get input geometry array: " + MString(status.errorString()));
         return status;
-    
-    MDataHandle applyHandle = block.inputValue(aApplyElongation, &status);
-    McheckErr(status, "Failed to obtain data handle for applyElongation");
-    bool applyElongation = applyHandle.asBool();
-    if (!applyElongation) {
-        // Do nothing if elongation is disabled.
-        return MS::kSuccess;
     }
 
     // Jump to the element corresponding to the current multiIndex.
@@ -166,7 +161,6 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     MDagPath meshPath;
     status = MDagPath::getAPathTo(meshNode, meshPath);
     CHECK_MSTATUS_AND_RETURN_IT(status);
-    // DEBUG SAFETY
     MGlobal::displayInfo(MString("Processing: ") + meshPath.fullPathName());
 
     if (!skinDataBaked) {
@@ -220,13 +214,41 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
         skinDataBaked = true;
         MGlobal::displayInfo("Skin weights initialized and cached.");
     }
-
     return MStatus::kSuccess;
+}
 
-#if 0
-    MTimeArray times;
-    times = Smear::getAnimationRange();
-    //Smear::getSkeletonInformation();
+
+MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
+{
+    MStatus status; 
+       
+    MDataHandle applyHandle = block.inputValue(aApplyElongation, &status);
+    McheckErr(status, "Failed to obtain data handle for applyElongation");
+    bool applyElongation = applyHandle.asBool();
+    if (!applyElongation) {
+        // Do nothing if elongation is disabled.
+        return MS::kSuccess;
+    }
+
+    MDataHandle timeDataHandle = block.inputValue(time, &status);
+    McheckErr(status, "Failed to obtain data handle for time input");
+
+    MTime currentTime = timeDataHandle.asTime();
+    double currentFrame = currentTime.as(MTime::kFilm);
+
+    // Get mesh and transform DAG path
+    MFnDependencyNode thisNodeFn(thisMObject());
+    MObject thisNode = thisMObject();
+    MPlug inputPlug(thisMObject(), input);
+    inputPlug = inputPlug.elementByLogicalIndex(0).child(inputGeom);
+
+    MObject meshObj;
+    inputPlug.getValue(meshObj);
+    McheckErr(status, "Failed to get mesh object");
+
+    //MPlug inputPlug = thisNodeFn.findPlug(inputMesh, true);
+    MDagPath meshPath, transformPath;
+    status = Smear::getDagPathsFromInputMesh(meshObj, inputPlug, transformPath, meshPath);
 
     // Check if the provided path point to correct node types.
     if (!meshPath.hasFn(MFn::kMesh)) {
@@ -246,7 +268,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     }
 
     int frameIndex = static_cast<int>(currentFrame - motionOffsets.startFrame);
-    
+
     if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
         return MS::kSuccess; // Skip invalid frames
     }
@@ -283,9 +305,9 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
 
     // Artistic control param
     const double elongationStrengthPast = block.inputValue(aelongationStrengthPast).asDouble();
-    const double elongationStrengthFuture = block.inputValue(aelongationStrengthFuture).asDouble(); 
+    const double elongationStrengthFuture = block.inputValue(aelongationStrengthFuture).asDouble();
 
-    MPoint point; 
+    MPoint point;
     for (; !iter.isDone(); iter.next()) {
         const int vertIdx = iter.index();
 
@@ -322,7 +344,6 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
 
         iter.setPosition(interpolated);
     }
-#endif
     return MS::kSuccess();
 }
 

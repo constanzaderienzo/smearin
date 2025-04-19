@@ -211,12 +211,14 @@ MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter, MDagPath& meshPa
         }
 
         // 3. Get all weights for all influences on all vertices
-        MDagPath inputMeshPath = meshPath;
         uint numInfluences;
         MDoubleArray weights;
 
-        status = skinFn.getWeights(inputMeshPath, vertexComp, weights, numInfluences);
-        MGlobal::displayInfo("After get weights.");
+        MDagPath skinnedPath;
+        status = skinFn.getPathAtIndex(0, skinnedPath);
+        CHECK_MSTATUS_AND_RETURN_IT(status);
+
+        status = skinFn.getWeights(skinnedPath, vertexComp, weights, numInfluences);
         CHECK_MSTATUS_AND_RETURN_IT(status);
 
         // 4. Reshape into per-vertex storage
@@ -264,7 +266,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     MDagPath meshPath, transformPath;
     getDagPaths(block, iter, multiIndex, meshPath, transformPath);
 
-    if (1) {
+    if (0) {
         deformSimple(block, iter, meshPath, transformPath);
     }
     else {
@@ -274,7 +276,8 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     return MS::kSuccess();
 }
 
-MStatus SmearDeformerNode::getDagPaths(MDataBlock& block, MItGeometry iter, unsigned int multiIndex, MDagPath& meshPath, MDagPath& transformPath) {
+MStatus SmearDeformerNode::getDagPaths(MDataBlock& block, MItGeometry iter, unsigned int multiIndex, MDagPath& meshPath, MDagPath& transformPath) 
+{
     MStatus status;
     MArrayDataHandle hInputArray = block.inputArrayValue(input, &status);
     if (!status) {
@@ -342,6 +345,7 @@ MStatus SmearDeformerNode::getDagPaths(MDataBlock& block, MItGeometry iter, unsi
 
     return status;
 }
+
 MPoint SmearDeformerNode::catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t) {
     // SMEAR paper uses standard Catmull-Rom interpolation (Section 4.1)
     const float t2 = t * t;

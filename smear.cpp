@@ -655,7 +655,6 @@ MStatus Smear::getSkinClusterAndBones(const MDagPath& inputPath,
                 }
 
                 MGlobal::displayInfo("Found skinCluster: " + MFnDependencyNode(skinClusterObj).name());
-                MGlobal::displayInfo("Found " + influenceBones.length());
                 return MS::kSuccess;
             }
         }

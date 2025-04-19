@@ -26,9 +26,14 @@ public:
 
     // Attributes
     static MObject time;
-    static MObject smoothWindowSize;
+    static MObject elongationSmoothWindowSize;
     static MObject smoothEnabled;
-    static MObject aStrength;
+    static MObject aelongationStrengthPast;
+    static MObject aelongationStrengthFuture; 
+    static MObject aApplyElongation; 
+
+    // Message attribute for connecting the control node.
+    static MObject inputControlMsg;
 
     SmearDeformerNode();
     ~SmearDeformerNode();

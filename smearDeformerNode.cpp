@@ -4,6 +4,7 @@
 #include <maya/MFnUnitAttribute.h>
 #include <maya/MFnTypedAttribute.h>
 #include <maya/MFnNumericAttribute.h>
+#include <maya/MFnMessageAttribute.h>
 #include <maya/MStatus.h>
 #include <maya/MGlobal.h>
 #include <maya/MDagPathArray.h>
@@ -25,10 +26,14 @@
 
 MTypeId SmearDeformerNode::id(0x98530); // Random id 
 MObject SmearDeformerNode::time;
-MObject SmearDeformerNode::smoothWindowSize;
+MObject SmearDeformerNode::elongationSmoothWindowSize;
 MObject SmearDeformerNode::smoothEnabled;
-MObject SmearDeformerNode::aStrength;
+MObject SmearDeformerNode::aelongationStrengthPast;
+MObject SmearDeformerNode::aelongationStrengthFuture; 
+MObject SmearDeformerNode::aApplyElongation;
 
+// Message attribute for connecting to the control node.
+MObject SmearDeformerNode::inputControlMsg;
 
 SmearDeformerNode::SmearDeformerNode():
     motionOffsets(), motionOffsetsBaked(false), skinDataBaked(false)
@@ -47,6 +52,7 @@ MStatus SmearDeformerNode::initialize()
     MFnNumericAttribute numAttr;
     MFnUnitAttribute unitAttr;
     MFnTypedAttribute typedAttr;
+    MFnMessageAttribute mAttr;  // For message attributes
     MStatus status;
 
     // Time attribute
@@ -56,15 +62,35 @@ MStatus SmearDeformerNode::initialize()
     smoothEnabled = numAttr.create("smoothEnabled", "smenb", MFnNumericData::kBoolean, true);
     addAttribute(smoothEnabled);
 
-    smoothWindowSize = numAttr.create("smoothWindow", "smwin", MFnNumericData::kInt, 2);
+    elongationSmoothWindowSize = numAttr.create("elongationSmoothWindow", "smwin", MFnNumericData::kInt, 2);
     numAttr.setMin(0);
     numAttr.setMax(5);
-    addAttribute(smoothWindowSize);
+    addAttribute(elongationSmoothWindowSize);
+    
+    // The length of the backward (trailing) elongation effect 
+    aelongationStrengthPast = numAttr.create("Past Strength", "ps", MFnNumericData::kDouble, 1.5);
+    numAttr.setMin(0);
+    numAttr.setMax(5);
+    addAttribute(aelongationStrengthPast);
+    
+    // The length of the forward (leading) elongation effect
+    aelongationStrengthFuture = numAttr.create("Future Strength", "fs", MFnNumericData::kDouble, 1.5);
+    numAttr.setMin(0);
+    numAttr.setMax(5);
+    addAttribute(aelongationStrengthFuture);
 
-    aStrength = numAttr.create("strength", "s", MFnNumericData::kDouble, 1.5);
-    numAttr.setMin(0);
-    numAttr.setMax(5);
-    addAttribute(aStrength);
+    // Create the boolean attribute for applying elongation.
+    aApplyElongation = numAttr.create("applyElongation", "apl", MFnNumericData::kBoolean, true, &status);
+    numAttr.setStorable(false);
+    numAttr.setKeyable(false);
+    addAttribute(aApplyElongation);
+
+    // Create the message attribute that will connect this deformer to the control node.
+    inputControlMsg = mAttr.create("inputControlMessage", "icm", &status);
+    mAttr.setStorable(false);
+    mAttr.setKeyable(false);
+    addAttribute(inputControlMsg);
+
     
     return MS::kSuccess;
 }
@@ -77,6 +103,13 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     if (!status) {
         MGlobal::displayError("Failed to get input geometry array: " + MString(status.errorString()));
         return status;
+    
+    MDataHandle applyHandle = block.inputValue(aApplyElongation, &status);
+    McheckErr(status, "Failed to obtain data handle for applyElongation");
+    bool applyElongation = applyHandle.asBool();
+    if (!applyElongation) {
+        // Do nothing if elongation is disabled.
+        return MS::kSuccess;
     }
 
     // Jump to the element corresponding to the current multiIndex.
@@ -113,7 +146,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
         // Already a mesh node
     }
     else if (meshNode.hasFn(MFn::kDependencyNode)) {
-        // Possibly a shape's outMesh plug — we walk upstream
+        // Possibly a shape's outMesh plug ï¿½ we walk upstream
         MItDependencyGraph dgIt(srcPlug,
             MFn::kMesh,
             MItDependencyGraph::kUpstream,
@@ -222,7 +255,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     const int numFrames = trajectories.size();
 
     const bool smoothingEnabled = block.inputValue(smoothEnabled).asBool();
-    const int N = smoothingEnabled ? block.inputValue(smoothWindowSize).asInt() : 0;
+    const int N = smoothingEnabled ? block.inputValue(elongationSmoothWindowSize).asInt() : 0;
     std::vector<double> smoothedOffsets(offsets.length(), 0.0);
 
     // Precompute smoothed offsets for all vertices
@@ -249,7 +282,8 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     }
 
     // Artistic control param
-    const double strength = block.inputValue(aStrength).asDouble();
+    const double elongationStrengthPast = block.inputValue(aelongationStrengthPast).asDouble();
+    const double elongationStrengthFuture = block.inputValue(aelongationStrengthFuture).asDouble(); 
 
     MPoint point; 
     for (; !iter.isDone(); iter.next()) {
@@ -261,10 +295,15 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
 
         // Get motion offset and apply strength
         double offset = smoothedOffsets[vertIdx];
-        const double beta = offset * strength;
+
+        // Calculate the strength factor based on motion offset value 
+        double t1 = (offset + 1.) / 2.; // remaps motion offset from [-1, 1] to [0, 1] 
+        double interpolatedStrength = (1.0 - t1) * elongationStrengthPast + t1 * elongationStrengthFuture;
+
+        const double beta = offset * interpolatedStrength;
 
         const int frameOffset = static_cast<int>(floor(beta));
-        const double t = beta - frameOffset;
+        const double t2 = beta - frameOffset;
 
         const int baseFrame = frameIndex + frameOffset;
         // Clamp frame indices
@@ -279,7 +318,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
         const MPoint& p2 = trajectories[f2][vertIdx];
         const MPoint& p3 = trajectories[f3][vertIdx];
 
-        MPoint interpolated = SmearDeformerNode::catmullRomInterpolate(p0, p1, p2, p3, t);
+        MPoint interpolated = SmearDeformerNode::catmullRomInterpolate(p0, p1, p2, p3, t2);
 
         iter.setPosition(interpolated);
     }

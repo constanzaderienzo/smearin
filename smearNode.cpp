@@ -127,9 +127,9 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
 
     int frameIndex = static_cast<int>(frame - motionOffsetsSimple.startFrame);
 
-    MGlobal::displayInfo("Current frame: " + MString() + frame +
-        " Start frame: " + motionOffsetsSimple.startFrame +
-        " Frame index: " + frameIndex);
+    //MGlobal::displayInfo("Current frame: " + MString() + frame +
+    //    " Start frame: " + motionOffsetsSimple.startFrame +
+    //    " Frame index: " + frameIndex);
 
     if (frameIndex < 0 || frameIndex >= motionOffsetsSimple.motionOffsets.size()) {
         return MS::kSuccess;

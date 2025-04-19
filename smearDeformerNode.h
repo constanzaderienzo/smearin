@@ -47,8 +47,9 @@ public:
         MItGeometry& iter,
         const MMatrix& localToWorldMatrix,
         unsigned int multiIndex) override;
-    MStatus deformSimple(MDataBlock& block, MItGeometry it, unsigned int multiIndex);
-    MStatus deformArticulated(MDataBlock& block, MItGeometry it, unsigned int multiIndex);
+    MStatus deformSimple(MDataBlock& block, MItGeometry& iter, MDagPath& meshPath, MDagPath& transformPath);
+    MStatus deformArticulated(MItGeometry& iter, MDagPath& meshPath);
+    MStatus getDagPaths(MDataBlock& block, MItGeometry iter, unsigned int multiIndex, MDagPath& meshPath, MDagPath& transformPath);
 
 private:
     MotionOffsetsSimple motionOffsets;
@@ -60,6 +61,11 @@ private:
     std::vector<BoneData> m_boneData;
     std::vector<std::vector<InfluenceData>> vertexWeights;
 
+    // Artistic control variables
+    double elongationStrengthPast;
+    double elongationStrengthFuture;
+    bool smoothingEnabled;
+    int N;
 
     // Interpolation helper
     MPoint catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t);

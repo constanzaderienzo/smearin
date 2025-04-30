@@ -45,6 +45,8 @@ public:
 MStatus executeMELScript() {
     MStatus status;
 
+    const char* $scriptPath = "C:/path/to/MySmearPlugin/scripts";
+
     const char* melScript = R"(
         global proc applySmearGUI() {
             // Delete any existing window
@@ -78,6 +80,8 @@ MStatus executeMELScript() {
 
             // Create the control node (SmearControlNode)
             string $controlNode = `createNode SmearControlNode -name "smearControl1"`;
+            addAttr -ln "triggerSmear" -at "bool" -dv 0 $controlNode;
+            connectAttr ($controlNode + ".triggerSmear") ($deformerNode + ".trigger");
 
             // Connect the message attribute from the control node to the deformer node.
             // (Assuming the control node defines a message attribute named "controlMessage"
@@ -143,7 +147,12 @@ MStatus executeMELScript() {
         // Create the main window for the control panel
         window -title "Smear Control Panel" smearControlWindow;
         columnLayout -adjustableColumn true;
-    
+
+        button -label "APPLY SMEAR NOW" 
+            -command ("setAttr smearControl1.triggerSmear 1; "
+                    + "refresh; "
+                    + "setAttr smearControl1.triggerSmear 0;");
+
         // Create a frame layout (collapsible section) for the "Elongated in-between" category
         frameLayout -label "Elongated in-between" -collapsable true -collapse false;
             columnLayout -adjustableColumn true;

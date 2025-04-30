@@ -31,6 +31,8 @@ public:
     static MObject aelongationStrengthPast;
     static MObject aelongationStrengthFuture; 
     static MObject aApplyElongation; 
+    static MObject trigger;
+
 
     // Message attribute for connecting the control node.
     static MObject inputControlMsg;

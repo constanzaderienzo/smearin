@@ -31,6 +31,7 @@ MObject SmearDeformerNode::smoothEnabled;
 MObject SmearDeformerNode::aelongationStrengthPast;
 MObject SmearDeformerNode::aelongationStrengthFuture; 
 MObject SmearDeformerNode::aApplyElongation;
+MObject SmearDeformerNode::trigger;
 
 // Message attribute for connecting to the control node.
 MObject SmearDeformerNode::inputControlMsg;
@@ -54,6 +55,9 @@ MStatus SmearDeformerNode::initialize()
     MFnTypedAttribute typedAttr;
     MFnMessageAttribute mAttr;  // For message attributes
     MStatus status;
+
+    trigger = numAttr.create("trigger", "trg", MFnNumericData::kBoolean);
+    addAttribute(trigger);
 
     // Time attribute
     time = unitAttr.create("time", "tm", MFnUnitAttribute::kTime, 0.0);
@@ -184,6 +188,7 @@ MStatus SmearDeformerNode::deformSimple(MDataBlock& block, MItGeometry& iter, MD
     }
     return MStatus::kSuccess;
 }
+
 MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter, MDagPath& meshPath) {
     MStatus status;
 
@@ -251,7 +256,10 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     MDataHandle applyHandle = block.inputValue(aApplyElongation, &status);
     McheckErr(status, "Failed to obtain data handle for applyElongation");
     bool applyElongation = applyHandle.asBool();
-    if (!applyElongation) {
+    MDataHandle triggerHandle = block.inputValue(trigger, &status);
+    bool triggerEnabled = triggerHandle.asBool();
+
+    if (!applyElongation || !triggerEnabled) {
         // Do nothing if elongation is disabled.
         return MS::kSuccess;
     }

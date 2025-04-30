@@ -39,6 +39,7 @@ MObject MotionLinesNode::aStrengthFuture;
 MObject MotionLinesNode::aGenerateMotionLines;
 MObject MotionLinesNode::aMotionLinesCount; 
 MObject MotionLinesNode::inputControlMsg;  // Message attribute for connecting to the control node
+MObject MotionLinesNode::trigger;
 
 MStatus MotionLinesNode::selectSeeds(int count)
 {
@@ -106,6 +107,9 @@ MStatus MotionLinesNode::initialize() {
     MFnTypedAttribute   tAttr;
     MFnNumericAttribute nAttr;
     MFnMessageAttribute mAttr;
+
+    trigger = nAttr.create("trigger", "trg", MFnNumericData::kBoolean);
+    addAttribute(trigger);
 
     // Time attribute
     time = uAttr.create("time", "tm", MFnUnitAttribute::kTime, 0.0, &status);
@@ -349,7 +353,9 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
     MDataHandle genHandle = data.inputValue(aGenerateMotionLines, &status);
     McheckErr(status, "Failed to obtain data handle for applyElongation");
     bool genMotionLines = genHandle.asBool();
-    if (!genMotionLines) {
+    MDataHandle triggerHandle = data.inputValue(trigger, &status);
+    bool triggerEnabled = triggerHandle.asBool();
+    if (!genMotionLines || !triggerEnabled) {
         MFnMeshData meshData;
         MObject newOutput = meshData.create(&status);
         MDataHandle outputHandle = data.outputValue(aOutputMesh, &status);

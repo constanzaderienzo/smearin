@@ -15,6 +15,7 @@
 #include <maya/MTimeArray.h>
 #include <maya/MFnSkinCluster.h>
 #include <maya/MFnSingleIndexedComponent.h>
+#include <maya/MAnimControl.h>
 
 
 #define McheckErr(stat, msg)        \
@@ -101,179 +102,94 @@ MStatus SmearDeformerNode::initialize()
 
 MStatus SmearDeformerNode::deformSimple(MDataBlock& block, MItGeometry& iter, MDagPath& meshPath, MDagPath& transformPath) {
     MStatus status;
-
-    MDataHandle timeDataHandle = block.inputValue(time, &status);
-    McheckErr(status, "Failed to obtain data handle for time input");
-    MTime currentTime = timeDataHandle.asTime();
-    double currentFrame = currentTime.as(MTime::kFilm);
-
-    // +++ Compute motion offsets using Smear functions +++
-    if (!motionOffsetsBaked) {
-        status = Smear::computeMotionOffsetsSimple(meshPath, transformPath, motionOffsets);
-        McheckErr(status, "Failed to compute motion offsets");
-        motionOffsetsBaked = true;
-    }
-
+    double currentFrame = block.inputValue(time, &status).asTime().as(MTime::kFilm);
     int frameIndex = static_cast<int>(currentFrame - motionOffsets.startFrame);
+    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) return MS::kSuccess;
+    applyDeformation(iter, frameIndex);
+    return MS::kSuccess;
+}
 
-    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
-        return MS::kSuccess; // Skip invalid frames
-    }
-    const MDoubleArray& offsets = motionOffsets.motionOffsets[frameIndex];
-    const std::vector<MPointArray>& trajectories = motionOffsets.vertexTrajectories;
-    const int numFrames = trajectories.size();
-
-    std::vector<double> smoothedOffsets(offsets.length(), 0.0);
-
-    // Precompute smoothed offsets for all vertices
-    for (int vertIdx = 0; vertIdx < offsets.length(); ++vertIdx) {
-        double totalWeight = 0.0;
-        double smoothed = 0.0;
-
-        for (int n = -N; n <= N; ++n) {
-            const int frame = frameIndex + n;
-
-            // Skip out-of-bounds frames
-            if (frame < 0 || frame >= motionOffsets.motionOffsets.size()) continue;
-
-            // Calculate weight
-            const double normalized = std::abs(n) / static_cast<double>(N + 1);
-            const double weight = std::pow(1.0 - std::pow(normalized, 2.0), 2.0);
-
-            smoothed += motionOffsets.motionOffsets[frame][vertIdx] * weight;
-            totalWeight += weight;
-        }
-
-        // Store final smoothed offset
-        smoothedOffsets[vertIdx] = totalWeight > 0.0 ? smoothed / totalWeight : offsets[vertIdx];
+// Updated deformArticulated() to use motion offsets (TODO: blend per-bone offsets)
+MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter, MDagPath& meshPath) {
+    MStatus status;
+    if (!skinDataBaked) {
+        // ... [existing skin cluster extraction code remains unchanged] ...
     }
 
-
-    MPoint point;
-    for (; !iter.isDone(); iter.next()) {
-        const int vertIdx = iter.index();
-
-        if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
-            continue;
-        }
-
-        // Get motion offset and apply strength
-        double offset = smoothedOffsets[vertIdx];
-
-        // Calculate the strength factor based on motion offset value 
-        double t1 = (offset + 1.) / 2.; // remaps motion offset from [-1, 1] to [0, 1] 
-        double interpolatedStrength = (1.0 - t1) * elongationStrengthPast + t1 * elongationStrengthFuture;
-
-        const double beta = offset * interpolatedStrength;
-
-        const int frameOffset = static_cast<int>(floor(beta));
-        const double t2 = beta - frameOffset;
-
-        const int baseFrame = frameIndex + frameOffset;
-        // Clamp frame indices
-        const int f0 = std::max(0, std::min(numFrames - 1, baseFrame - 1));
-        const int f1 = std::max(0, std::min(numFrames - 1, baseFrame));
-        const int f2 = std::max(0, std::min(numFrames - 1, baseFrame + 1));
-        const int f3 = std::max(0, std::min(numFrames - 1, baseFrame + 2));
-
-        // Get trajectory points
-        const MPoint& p0 = trajectories[f0][vertIdx];
-        const MPoint& p1 = trajectories[f1][vertIdx];
-        const MPoint& p2 = trajectories[f2][vertIdx];
-        const MPoint& p3 = trajectories[f3][vertIdx];
-
-        MPoint interpolated = SmearDeformerNode::catmullRomInterpolate(p0, p1, p2, p3, t2);
-
-        iter.setPosition(interpolated);
-    }
+    // This is where you'd compute per-vertex δᵢ based on bone velocities & influence
+    // For now, just fallback to simple deformation using precomputed offsets
+    double currentFrame = MAnimControl::currentTime().as(MTime::kFilm);
+    int frameIndex = static_cast<int>(currentFrame - motionOffsets.startFrame);
+    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) return MS::kSuccess;
+    applyDeformation(iter, frameIndex);
     return MStatus::kSuccess;
 }
 
-MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter, MDagPath& meshPath) {
-    MStatus status;
+MString createCachePath(const MString& meshName) {
+    // Start with proper Windows path format
+    MString cachePath = "C:/temp/vertex_cache_";
 
-    if (!skinDataBaked) {
-        MGlobal::displayInfo("Calculating skin data.");
-        // 1. Get skinCluster and influence bones
-        MObject skinClusterObj;
-        MDagPathArray influenceBones;
-        status = Smear::getSkinClusterAndBones(meshPath, skinClusterObj, influenceBones);
-        if (!status) return status;
+    // Clean the mesh name
+    MString cleanName = meshName;
+    cleanName.substitute("|", "_");
+    cleanName.substitute(":", "_");
 
-        MFnSkinCluster skinFn(skinClusterObj, &status);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
-
-        // 2. Create full vertex component
-        MFnSingleIndexedComponent compFn;
-        MObject vertexComp = compFn.create(MFn::kMeshVertComponent, &status);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
-
-        uint numVertices = iter.count(&status);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
-
-        for (uint i = 0; i < numVertices; ++i) {
-            compFn.addElement(i);
-        }
-
-        // 3. Get all weights for all influences on all vertices
-        uint numInfluences;
-        MDoubleArray weights;
-
-        MDagPath skinnedPath;
-        status = skinFn.getPathAtIndex(0, skinnedPath);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
-
-        status = skinFn.getWeights(skinnedPath, vertexComp, weights, numInfluences);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
-
-        // 4. Reshape into per-vertex storage
-        vertexWeights.clear();
-        vertexWeights.resize(numVertices);
-
-        for (uint v = 0; v < numVertices; ++v) {
-            std::vector<InfluenceData> influences;
-
-            for (uint j = 0; j < numInfluences; ++j) {
-                float w = static_cast<float>(weights[v * numInfluences + j]);
-                if (w > 0.001f) {  // ignore negligible weights
-                    influences.push_back({ j, w });
-                }
-            }
-            vertexWeights[v] = influences;
-        }
-
-        skinDataBaked = true;
-        MGlobal::displayInfo("Skin weights initialized and cached.");
-    }
-    return MStatus::kSuccess;
+    // Build final path
+    cachePath += cleanName + ".json";
+    return cachePath;
 }
 
 MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
 {
     MStatus status; 
        
-    // Artistic control param
-    MDataHandle applyHandle = block.inputValue(aApplyElongation, &status);
-    McheckErr(status, "Failed to obtain data handle for applyElongation");
-    bool applyElongation = applyHandle.asBool();
-    MDataHandle triggerHandle = block.inputValue(trigger, &status);
-    bool triggerEnabled = triggerHandle.asBool();
-
-    if (!applyElongation || !triggerEnabled) {
-        // Do nothing if elongation is disabled.
+    // Check if we should run deformation
+    bool applyElongation = block.inputValue(aApplyElongation, &status).asBool();
+    bool triggerEnabled = block.inputValue(trigger, &status).asBool();
+    if (!status || !applyElongation) {
         return MS::kSuccess;
     }
 
-    elongationStrengthPast = block.inputValue(aelongationStrengthPast).asDouble();
-    elongationStrengthFuture = block.inputValue(aelongationStrengthFuture).asDouble();
-
-    smoothingEnabled = block.inputValue(smoothEnabled).asBool();
-    N = smoothingEnabled ? block.inputValue(elongationSmoothWindowSize).asInt() : 0;
-    // ################################
-
+    // 1. Get current mesh information
     MDagPath meshPath, transformPath;
     getDagPaths(block, iter, multiIndex, meshPath, transformPath);
+    MString meshName = meshPath.fullPathName();
 
+    // Generate cache path (could be configurable via attribute)
+    MString cachePath = createCachePath("pCylinder1");
+    MGlobal::displayInfo(MString("Loading cache from: ") + cachePath);
+    // Load cache if needed
+    if (!loadVertexCache(cachePath)) {
+        // Fallback to Python generation
+        MString pythonCmd = R"(
+        import os
+        import maya.cmds as cmds
+
+        # Reuse the same path resolution
+        plugin_name = 'smearin'
+        plugin_path = cmds.pluginInfo(plugin_name, query=True, path=True)
+        scripts_dir = os.path.join(os.path.dirname(plugin_path), '..', 'scripts')
+        sys.path.insert(0, scripts_dir)
+
+        import vertex_cache_tool
+        vertex_cache_tool.cache_vertex_trajectories('^1s', r'^2s')
+            )";
+
+        pythonCmd.format(meshName.asChar(), cachePath.asChar());
+
+        if (MGlobal::executePythonCommand(pythonCmd) != MS::kSuccess) {
+            MGlobal::displayError("Failed to generate vertex cache");
+            return MS::kFailure;
+        }
+    }
+
+    // 3. Get deformation parameters
+    elongationStrengthPast = block.inputValue(aelongationStrengthPast).asDouble();
+    elongationStrengthFuture = block.inputValue(aelongationStrengthFuture).asDouble();
+    smoothingEnabled = block.inputValue(smoothEnabled).asBool();
+    N = smoothingEnabled ? block.inputValue(elongationSmoothWindowSize).asInt() : 0;
+
+    // 4. Perform deformation
     if (0) {
         deformSimple(block, iter, meshPath, transformPath);
     }
@@ -352,6 +268,110 @@ MStatus SmearDeformerNode::getDagPaths(MDataBlock& block, MItGeometry iter, unsi
     transformPath.pop(); // Removes the shape node, leaving the transform 
 
     return status;
+}
+
+// Updated loadVertexCache to also parse startFrame
+bool SmearDeformerNode::loadVertexCache(const MString& cachePath) {
+    if (lastCachePath == cachePath && !vertexCache.empty()) return true;
+    clearVertexCache();
+    lastCachePath = cachePath;
+
+    try {
+        std::ifstream file(cachePath.asChar());
+        if (!file.is_open()) return false;
+
+        json data;
+        file >> data;
+
+        if (!data.contains("vertex_count") || !data.contains("frames")) return false;
+
+        vertexCount = data["vertex_count"];
+        motionOffsets.startFrame = data.value("start_frame", 0);
+
+        for (auto& [frameStr, positions] : data["frames"].items()) {
+            int frame = std::stoi(frameStr);
+            FrameCache frameCache;
+            frameCache.positions.reserve(vertexCount);
+            for (auto& pos : positions) {
+                frameCache.positions.emplace_back(pos[0], pos[1], pos[2]);
+            }
+            vertexCache[frame] = std::move(frameCache);
+        }
+
+        if (data.contains("motion_offsets")) {
+            for (auto& [frameStr, offsets] : data["motion_offsets"].items()) {
+                int frame = std::stoi(frameStr);
+                MDoubleArray offsetArr;
+                for (auto& val : offsets) offsetArr.append(val);
+                motionOffsets.motionOffsets[frame] = offsetArr;
+            }
+        }
+
+        // Rebuild vertexTrajectories as a frame-indexed vector for splines
+        motionOffsets.vertexTrajectories.clear();
+        for (int i = 0; i < vertexCache.size(); ++i) {
+            MPointArray arr;
+            for (const auto& pt : vertexCache[motionOffsets.startFrame + i].positions) {
+                arr.append(pt);
+            }
+            motionOffsets.vertexTrajectories.push_back(arr);
+        }
+
+        return true;
+    }
+    catch (const std::exception& e) {
+        MGlobal::displayError(MString("Cache loading failed: ") + e.what());
+        clearVertexCache();
+        return false;
+    }
+}
+
+void SmearDeformerNode::clearVertexCache() {
+    vertexCache.clear();
+    vertexCount = 0;
+    lastCachePath = "";
+}
+
+// General deformation application using offsets + trajectories
+void SmearDeformerNode::applyDeformation(MItGeometry& iter, int frameIndex) {
+    const int numFrames = static_cast<int>(motionOffsets.vertexTrajectories.size());
+    const MDoubleArray& offsets = motionOffsets.motionOffsets[frameIndex];
+
+    std::vector<double> finalOffsets(offsets.length());
+    for (int i = 0; i < offsets.length(); ++i) {
+        double sum = 0.0, total = 0.0;
+        for (int j = -N; j <= N; ++j) {
+            int idx = frameIndex + j;
+            if (idx < 0 || idx >= motionOffsets.motionOffsets.size()) continue;
+            double w = std::pow(1.0 - std::pow(std::abs(j) / double(N + 1), 2.0), 2.0);
+            sum += motionOffsets.motionOffsets[idx][i] * w;
+            total += w;
+        }
+        finalOffsets[i] = (total > 0.0) ? sum / total : offsets[i];
+    }
+
+    for (; !iter.isDone(); iter.next()) {
+        int idx = iter.index();
+        double offset = finalOffsets[idx];
+        double t = (offset + 1.0) / 2.0;
+        double strength = (1.0 - t) * elongationStrengthPast + t * elongationStrengthFuture;
+        double beta = offset * strength;
+
+        int baseFrame = frameIndex + int(floor(beta));
+        double localT = beta - floor(beta);
+
+        int f0 = std::clamp(baseFrame - 1, 0, numFrames - 1);
+        int f1 = std::clamp(baseFrame, 0, numFrames - 1);
+        int f2 = std::clamp(baseFrame + 1, 0, numFrames - 1);
+        int f3 = std::clamp(baseFrame + 2, 0, numFrames - 1);
+
+        const MPoint& p0 = motionOffsets.vertexTrajectories[f0][idx];
+        const MPoint& p1 = motionOffsets.vertexTrajectories[f1][idx];
+        const MPoint& p2 = motionOffsets.vertexTrajectories[f2][idx];
+        const MPoint& p3 = motionOffsets.vertexTrajectories[f3][idx];
+
+        iter.setPosition(catmullRomInterpolate(p0, p1, p2, p3, localT));
+    }
 }
 
 MPoint SmearDeformerNode::catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t) {

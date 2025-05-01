@@ -6,7 +6,12 @@
 #include <maya/MDagPathArray.h>
 #include <maya/MVector.h>
 #include <vector>
+#include <unordered_map>
 #include "smear.h"
+#include <fstream>  
+#include "json.hpp"
+using json = nlohmann::json;
+
 
 /*
 deformer -type "SmearDeformerNode" pCylinder1;
@@ -16,6 +21,11 @@ connectAttr "time1.outTime" "SmearDeformerNode1.time";
 struct InfluenceData {
     uint influenceIndex;
     float weight;
+};
+
+struct FrameCache {
+    std::vector<MPoint> positions;
+    bool loaded = false;
 };
 
 class SmearDeformerNode : public MPxDeformerNode
@@ -49,6 +59,7 @@ public:
         MItGeometry& iter,
         const MMatrix& localToWorldMatrix,
         unsigned int multiIndex) override;
+    void applyDeformation(MItGeometry& iter, int frameIndex);
     MStatus deformSimple(MDataBlock& block, MItGeometry& iter, MDagPath& meshPath, MDagPath& transformPath);
     MStatus deformArticulated(MItGeometry& iter, MDagPath& meshPath);
     MStatus getDagPaths(MDataBlock& block, MItGeometry iter, unsigned int multiIndex, MDagPath& meshPath, MDagPath& transformPath);
@@ -68,6 +79,13 @@ private:
     double elongationStrengthFuture;
     bool smoothingEnabled;
     int N;
+
+    std::unordered_map<int, FrameCache> vertexCache;
+    int vertexCount = 0;
+    MString lastCachePath;
+
+    bool loadVertexCache(const MString& cachePath);
+    void clearVertexCache();
 
     // Interpolation helper
     MPoint catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t);

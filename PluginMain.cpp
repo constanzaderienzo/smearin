@@ -45,8 +45,6 @@ public:
 MStatus executeMELScript() {
     MStatus status;
 
-    const char* $scriptPath = "C:/path/to/MySmearPlugin/scripts";
-
     const char* melScript = R"(
         global proc applySmearGUI() {
             // Delete any existing window
@@ -288,6 +286,38 @@ MStatus initializePlugin(MObject obj) {
         status.perror("registerNode MotionLinesNode");
         return status;
     }
+
+    MString pythonInit = R"(
+import os, sys
+import maya.cmds as cmds
+
+# Get this plugin's path from Maya
+plugin_name = 'smearin'  # Match your plugin name
+plugin_path = cmds.pluginInfo(plugin_name, query=True, path=True)
+scripts_dir = os.path.join(os.path.dirname(plugin_path), '..', 'scripts')
+
+# Convert to absolute path and normalize
+scripts_dir = os.path.abspath(scripts_dir.replace('\\', '/'))
+
+if not os.path.exists(scripts_dir):
+    raise RuntimeError(f"Scripts directory not found at: {scripts_dir}")
+
+if scripts_dir not in sys.path:
+    sys.path.insert(0, scripts_dir)
+
+print(f"[SMEARin] Plugin path: {plugin_path}")
+print(f"[SMEARin] Scripts directory: {scripts_dir}")
+print(f"[SMEARin] Directory contents: {os.listdir(scripts_dir)}")
+
+try:
+    import vertex_cache_tool
+    print("[SMEARin] Module imported successfully")
+except ImportError as e:
+    print(f"[SMEARin] Import failed. Python path: {sys.path}")
+    raise
+    )";
+
+    MGlobal::executePythonCommand(pythonInit);
 
     // Adds plugin related GUI to the Maya toolbar
     executeMELScript();

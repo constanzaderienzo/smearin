@@ -3,6 +3,7 @@ import maya.api.OpenMaya as om
 from maya.api import OpenMayaAnim  as oma
 import numpy as np
 from maya.api.OpenMaya import MVector
+import json
 
 def get_selected_mesh():
     sel = cmds.ls(selection=True, dag=True, type='mesh')
@@ -183,8 +184,6 @@ def slerp(v0, v1, t):
     so = np.sin(omega)
     return (np.sin((1.0 - t) * omega) / so) * v0 + (np.sin(t * omega) / so) * v1
 
-import numpy as np
-
 def build_deltas(verts, joints, weights_arr, joints_list, window=2):
     frames = sorted(verts.keys())
     num_frames = len(frames)
@@ -265,3 +264,44 @@ def build_deltas(verts, joints, weights_arr, joints_list, window=2):
     smoothed = np.apply_along_axis(lambda m: np.convolve(m, kernel, mode='same'), axis=0, arr=all_deltas)
 
     return {frame: smoothed[i] for i, frame in enumerate(frames)}
+
+def cache_vertex_trajectories_with_deltas(mesh_name, output_path):
+    # Frame range
+    start = int(cmds.playbackOptions(q=True, min=True))
+    end   = int(cmds.playbackOptions(q=True, max=True))
+    frames = list(range(start, end + 1))
+
+    # Load vertex and joint animation data
+    verts, joints = get_anim_vertices_and_joints_maya(start, end)
+
+    # Skin cluster & joint info
+    skin_cluster = get_skin_cluster(mesh_name)
+    joints_list = get_influencing_joints(skin_cluster)
+    weights_arr = get_skin_weights(mesh_name, skin_cluster, joints_list)
+
+    # Compute deltas
+    deltas = build_deltas(verts, joints, weights_arr, joints_list)
+
+    # Prepare final export structure
+    vertex_count = len(verts[start])
+    vertex_trajectories = {}
+    motion_offsets = {}
+
+    for frame in frames:
+        frame_str = str(frame)
+        vertex_trajectories[frame_str] = verts[frame].tolist()
+        motion_offsets[frame_str] = deltas[frame].tolist()
+
+    data = {
+        "vertex_count": vertex_count,
+        "start_frame": start,
+        "end_frame": end,
+        "vertex_trajectories": vertex_trajectories,
+        "motion_offsets": motion_offsets
+    }
+
+    # Save to JSON
+    with open(output_path, 'w') as f:
+        json.dump(data, f, indent=0, separators=(',', ':'))
+
+    print(f"[SMEARin] Exported vertex trajectories + deltas to {output_path}")

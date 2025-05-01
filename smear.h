@@ -9,7 +9,7 @@
 #include <maya/MPointArray.h>
 #include <maya/MDoubleArray.h>
 #include <maya/MDagPath.h>
-#include <unordered_map>
+#include <vector>
 #include <fstream>  
 #include "json.hpp"
 using json = nlohmann::json;
@@ -60,12 +60,10 @@ public:
     static MStatus getSkinClusterAndBones(const MDagPath& meshPath, MObject& skinClusterObj, MDagPathArray& influenceBones);
     static MTimeArray getAnimationRange();
 
-    std::unordered_map<int, FrameCache> vertexCache;
+    std::vector<FrameCache> vertexCache;
     int vertexCount = 0;
     MString lastCachePath;
 
     bool loadVertexCache(const MString& cachePath);
     void clearVertexCache();
-
-    MotionOffsetsSimple motionOffsets;
 };

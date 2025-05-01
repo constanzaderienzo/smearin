@@ -681,66 +681,161 @@ MString createCachePath(const MString& meshName) {
     return cachePath;
 }
 
-bool Smear::loadVertexCache(const MString& cachePath) {
-    if (lastCachePath == cachePath && !vertexCache.empty()) return true;
+bool Smear::loadVertexCache(const MString& cachePath)
+{
+    if (lastCachePath == cachePath && !vertexCache.empty())
+        return true;
+
     clearVertexCache();
     lastCachePath = cachePath;
 
-    try {
-        std::ifstream file(cachePath.asChar());
-        if (!file.is_open()) return false;
+    try
+    {
+        std::ifstream file(cachePath.asChar(), std::ios::binary);
+        if (!file.is_open())
+            return false;
 
         json data;
         file >> data;
 
-        if (!data.contains("vertex_count") || !data.contains("vertex_trajectories")) return false;
+        //----------------------- header checks ------------------------
+        if (!data.contains("vertex_count"))
+            return false;
 
+        const bool hasOldKey = data.contains("vertex_trajectories");
+        const bool hasNewKey = data.contains("frames");
+        if (!hasOldKey && !hasNewKey)
+            return false;                          // no position data at all
+
+        //----------------------- basic info ---------------------------
         vertexCount = data["vertex_count"];
-        int startFrame = data.value("start_frame", 0);
-        int endFrame = data.value("end_frame", startFrame);
+        motionOffsets.startFrame = data.value("start_frame", 0);
+        motionOffsets.endFrame = data.value("end_frame",
+            motionOffsets.startFrame);
+        int startFrame = motionOffsets.startFrame;
+        int endFrame = motionOffsets.endFrame;
 
-        // Load vertex trajectories
-        for (auto& [frameStr, positions] : data["vertex_trajectories"].items()) {
+        //----------------------- vertex positions ---------------------
+        const json& posBlock = hasOldKey ? data["vertex_trajectories"]
+            : data["frames"];
+
+        for (const auto& [frameStr, positions] : posBlock.items())
+        {
             int frame = std::stoi(frameStr);
-            FrameCache frameCache;
-            frameCache.positions.reserve(vertexCount);
-            for (auto& pos : positions) {
-                frameCache.positions.emplace_back(pos[0], pos[1], pos[2]);
-            }
-            vertexCache[frame] = std::move(frameCache);
+            FrameCache fCache;
+            fCache.positions.reserve(vertexCount);
+
+            for (const auto& pos : positions)
+                fCache.positions.emplace_back(pos[0], pos[1], pos[2]);
+
+            vertexCache[frame] = std::move(fCache);
         }
 
-        // Load motion offsets (optional)
-        if (data.contains("motion_offsets")) {
-            for (auto& [frameStr, offsets] : data["motion_offsets"].items()) {
+        //----------------------- motion offsets (optional) ------------
+        if (data.contains("motion_offsets"))
+        {
+            for (const auto& [frameStr, offsets] : data["motion_offsets"].items())
+            {
                 int frame = std::stoi(frameStr);
-                MDoubleArray offsetArr;
-                for (auto& val : offsets) offsetArr.append(val);
-                motionOffsets.motionOffsets[frame] = offsetArr;
+                MDoubleArray arr;
+                arr.setLength(offsets.size());
+                for (unsigned i = 0; i < offsets.size(); ++i)
+                    arr[i] = offsets[i];
+
+                motionOffsets.motionOffsets[frame] = arr;
             }
         }
 
-        // Rebuild vertexTrajectories for spline interpolation
+        //----------------------- rebuild trajectories -----------------
         motionOffsets.vertexTrajectories.clear();
-        for (int f = motionOffsets.startFrame; f <= endFrame; ++f) {
+        motionOffsets.vertexTrajectories.reserve(endFrame - startFrame + 1);
+
+        for (int f = startFrame; f <= endFrame; ++f)
+        {
             MPointArray arr;
             const auto it = vertexCache.find(f);
-            if (it != vertexCache.end()) {
-                for (const auto& pt : it->second.positions) {
+            if (it != vertexCache.end())
+                for (const auto& pt : it->second.positions)
                     arr.append(pt);
-                }
-            }
+
             motionOffsets.vertexTrajectories.push_back(arr);
         }
 
         return true;
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& e)
+    {
         MGlobal::displayError(MString("Cache loading failed: ") + e.what());
         clearVertexCache();
         return false;
     }
 }
+
+bool Smear::loadVertexCache(const MString& cachePath)
+{
+    if (lastCachePath == cachePath && !vertexCache.empty())
+        return true;
+
+    clearVertexCache();
+    lastCachePath = cachePath;
+
+    try
+    {
+        std::ifstream file(cachePath.asChar(), std::ios::binary);
+        if (!file.is_open())
+            return false;
+
+        json data;
+        file >> data;
+
+        //----------------------- header checks ------------------------
+        if (!data.contains("vertex_count") || !data.contains("motion_offsets") || !data.contains("vertex_trajectories"))
+            MGlobal::displayError(MString("Cache loading failed: some fields not found"));
+            return false;
+
+        //----------------------- basic info ---------------------------
+        vertexCount = data["vertex_count"];
+        int startFrame = data.value("start_frame", 0);
+        int endFrame = data.value("end_frame", startFrame);
+
+        //----------------------- vertex positions ---------------------
+        const json& vertex_trajectories = data["vertex_trajectories"];
+        for (const auto& [frameStr, positions] : vertex_trajectories.items())
+        {
+            int frame = std::stoi(frameStr);
+            FrameCache fCache;
+            fCache.positions.reserve(vertexCount);
+
+            for (const auto& pos : positions)
+                fCache.positions.emplace_back(pos[0], pos[1], pos[2]);
+
+            vertexCache[frame] = std::move(fCache);
+        }
+
+        //----------------------- motion offsets ------------
+        for (const auto& [frameStr, offsets] : data["motion_offsets"].items())
+        {
+            int frame = std::stoi(frameStr);
+
+            vertexCache[frame].motionOffsets.setLength(offsets.size());
+            for (unsigned i = 0; i < offsets.size(); ++i)
+            {
+                vertexCache[frame].motionOffsets[i] = offsets[i];
+            }
+        }
+
+        return true;
+    }
+
+    catch (const std::exception& e)
+    {
+        MGlobal::displayError(MString("Cache loading failed: ") + e.what());
+        clearVertexCache();
+        return false;
+    }
+}
+
+
 
 void Smear::clearVertexCache() {
     vertexCache.clear();

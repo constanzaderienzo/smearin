@@ -16,7 +16,8 @@
 #include <maya/MFnSkinCluster.h>
 #include <maya/MFnSingleIndexedComponent.h>
 #include <maya/MAnimControl.h>
-
+#include <filesystem>
+namespace fs = std::filesystem;
 
 #define McheckErr(stat, msg)        \
     if (MS::kSuccess != stat) {     \
@@ -126,8 +127,9 @@ MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter, MDagPath& meshPa
 }
 
 MString createCachePath(const MString& meshName) {
-    // Start with proper Windows path format
-    MString cachePath = "C:/temp/vertex_cache_";
+    // Get current working directory
+    fs::path cwd = fs::current_path();  // e.g., C:/Users/.../smearin/build
+    MString basePath(cwd.u8string().c_str());
 
     // Clean the mesh name
     MString cleanName = meshName;
@@ -135,7 +137,7 @@ MString createCachePath(const MString& meshName) {
     cleanName.substitute(":", "_");
 
     // Build final path
-    cachePath += cleanName + ".json";
+    MString cachePath = basePath + "/vertex_cache_" + cleanName + ".json";
     return cachePath;
 }
 
@@ -160,22 +162,11 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     MGlobal::displayInfo(MString("Loading cache from: ") + cachePath);
     // Load cache if needed
     if (!loadVertexCache(cachePath)) {
-        // Fallback to Python generation
-        MString pythonCmd = R"(
-        import os
-        import maya.cmds as cmds
-
-        # Reuse the same path resolution
-        plugin_name = 'smearin'
-        plugin_path = cmds.pluginInfo(plugin_name, query=True, path=True)
-        scripts_dir = os.path.join(os.path.dirname(plugin_path), '..', 'scripts')
-        sys.path.insert(0, scripts_dir)
-
-        import vertex_cache_tool
-        vertex_cache_tool.cache_vertex_trajectories('^1s', r'^2s')
-            )";
-
-        pythonCmd.format(meshName.asChar(), cachePath.asChar());
+        MString pythonCmd;
+        pythonCmd.format(
+            "vertex_cache_tool.cache_vertex_trajectories(r'^1s', r'^2s')",
+            meshName.asChar(), cachePath.asChar()
+        );
 
         if (MGlobal::executePythonCommand(pythonCmd) != MS::kSuccess) {
             MGlobal::displayError("Failed to generate vertex cache");

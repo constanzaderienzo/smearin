@@ -7,10 +7,17 @@ include($ENV{DEVKIT_LOCATION}/cmake/pluginEntry.cmake)
 
 set(SOURCE_FILES
     PluginMain.cpp
+    cylinder.cpp
+    motionLinesNode.cpp
     smear.cpp
+    smearControlNode.cpp
+    smearDeformerNode.cpp    
     smearNode.cpp
 )
 
+message(STATUS "SOURCE_FILES = ${SOURCE_FILES}")
+list(REMOVE_DUPLICATES SOURCE_FILES)
+message(STATUS "Final deduplicated sources: ${SOURCE_FILES}")
 set(LIBRARIES
     OpenMaya 
     Foundation

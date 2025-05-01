@@ -19,6 +19,8 @@
 #include <maya/MItDependencyGraph.h>
 #include <maya/MDagPathArray.h>
 #include <maya/MItDag.h>
+#include <filesystem>
+namespace fs = std::filesystem;
 
 #define McheckErr(stat, msg)        \
     if (MS::kSuccess != stat) {     \
@@ -26,6 +28,9 @@
         return MS::kFailure;        \
     }
 
+int Smear::vertexCount = 0;
+std::vector<FrameCache> Smear::vertexCache;
+MString Smear::lastCachePath;
 
 MTimeArray Smear::getAnimationRange() {
     MTimeArray timeArray;
@@ -206,7 +211,6 @@ bool compareTransformComponents(MTransformationMatrix::RotationOrder rotOrder, c
     return translationMatch && rotationMatch && scaleMatch;
 }
 
-
 MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
     const double startFrame,
     const double endFrame,
@@ -265,7 +269,6 @@ MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
 
     return MS::kSuccess;
 }
-
 
 MStatus Smear::computeCentroidLocal(const MDagPath& shapePath, const MDagPath& transformPath, MVector& centroidLocal) {
     MStatus status;
@@ -681,7 +684,7 @@ MString createCachePath(const MString& meshName) {
     return cachePath;
 }
 
-bool Smear::loadVertexCache(const MString& cachePath)
+bool Smear::loadCache(const MString& cachePath)
 {
     if (lastCachePath == cachePath && !vertexCache.empty())
         return true;
@@ -699,99 +702,10 @@ bool Smear::loadVertexCache(const MString& cachePath)
         file >> data;
 
         //----------------------- header checks ------------------------
-        if (!data.contains("vertex_count"))
-            return false;
-
-        const bool hasOldKey = data.contains("vertex_trajectories");
-        const bool hasNewKey = data.contains("frames");
-        if (!hasOldKey && !hasNewKey)
-            return false;                          // no position data at all
-
-        //----------------------- basic info ---------------------------
-        vertexCount = data["vertex_count"];
-        motionOffsets.startFrame = data.value("start_frame", 0);
-        motionOffsets.endFrame = data.value("end_frame",
-            motionOffsets.startFrame);
-        int startFrame = motionOffsets.startFrame;
-        int endFrame = motionOffsets.endFrame;
-
-        //----------------------- vertex positions ---------------------
-        const json& posBlock = hasOldKey ? data["vertex_trajectories"]
-            : data["frames"];
-
-        for (const auto& [frameStr, positions] : posBlock.items())
-        {
-            int frame = std::stoi(frameStr);
-            FrameCache fCache;
-            fCache.positions.reserve(vertexCount);
-
-            for (const auto& pos : positions)
-                fCache.positions.emplace_back(pos[0], pos[1], pos[2]);
-
-            vertexCache[frame] = std::move(fCache);
-        }
-
-        //----------------------- motion offsets (optional) ------------
-        if (data.contains("motion_offsets"))
-        {
-            for (const auto& [frameStr, offsets] : data["motion_offsets"].items())
-            {
-                int frame = std::stoi(frameStr);
-                MDoubleArray arr;
-                arr.setLength(offsets.size());
-                for (unsigned i = 0; i < offsets.size(); ++i)
-                    arr[i] = offsets[i];
-
-                motionOffsets.motionOffsets[frame] = arr;
-            }
-        }
-
-        //----------------------- rebuild trajectories -----------------
-        motionOffsets.vertexTrajectories.clear();
-        motionOffsets.vertexTrajectories.reserve(endFrame - startFrame + 1);
-
-        for (int f = startFrame; f <= endFrame; ++f)
-        {
-            MPointArray arr;
-            const auto it = vertexCache.find(f);
-            if (it != vertexCache.end())
-                for (const auto& pt : it->second.positions)
-                    arr.append(pt);
-
-            motionOffsets.vertexTrajectories.push_back(arr);
-        }
-
-        return true;
-    }
-    catch (const std::exception& e)
-    {
-        MGlobal::displayError(MString("Cache loading failed: ") + e.what());
-        clearVertexCache();
-        return false;
-    }
-}
-
-bool Smear::loadVertexCache(const MString& cachePath)
-{
-    if (lastCachePath == cachePath && !vertexCache.empty())
-        return true;
-
-    clearVertexCache();
-    lastCachePath = cachePath;
-
-    try
-    {
-        std::ifstream file(cachePath.asChar(), std::ios::binary);
-        if (!file.is_open())
-            return false;
-
-        json data;
-        file >> data;
-
-        //----------------------- header checks ------------------------
-        if (!data.contains("vertex_count") || !data.contains("motion_offsets") || !data.contains("vertex_trajectories"))
+        if (!data.contains("vertex_count") || !data.contains("motion_offsets") || !data.contains("vertex_trajectories")) {
             MGlobal::displayError(MString("Cache loading failed: some fields not found"));
             return false;
+        }
 
         //----------------------- basic info ---------------------------
         vertexCount = data["vertex_count"];
@@ -802,14 +716,13 @@ bool Smear::loadVertexCache(const MString& cachePath)
         const json& vertex_trajectories = data["vertex_trajectories"];
         for (const auto& [frameStr, positions] : vertex_trajectories.items())
         {
-            int frame = std::stoi(frameStr);
             FrameCache fCache;
             fCache.positions.reserve(vertexCount);
 
             for (const auto& pos : positions)
                 fCache.positions.emplace_back(pos[0], pos[1], pos[2]);
 
-            vertexCache[frame] = std::move(fCache);
+            vertexCache.push_back(std::move(fCache));
         }
 
         //----------------------- motion offsets ------------
@@ -834,8 +747,6 @@ bool Smear::loadVertexCache(const MString& cachePath)
         return false;
     }
 }
-
-
 
 void Smear::clearVertexCache() {
     vertexCache.clear();

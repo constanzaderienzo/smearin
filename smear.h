@@ -12,6 +12,7 @@
 #include <vector>
 #include <fstream>  
 #include "json.hpp"
+
 using json = nlohmann::json;
 
 using std::cout;
@@ -60,10 +61,10 @@ public:
     static MStatus getSkinClusterAndBones(const MDagPath& meshPath, MObject& skinClusterObj, MDagPathArray& influenceBones);
     static MTimeArray getAnimationRange();
 
-    std::vector<FrameCache> vertexCache;
-    int vertexCount = 0;
-    MString lastCachePath;
+    static std::vector<FrameCache> vertexCache;
+    static int vertexCount;
+    static MString lastCachePath;
 
-    bool loadVertexCache(const MString& cachePath);
-    void clearVertexCache();
+    static bool loadCache(const MString& cachePath);
+    static void clearVertexCache();
 };

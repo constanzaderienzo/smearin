@@ -325,6 +325,8 @@ except Exception as e:
     // Adds plugin related GUI to the Maya toolbar
     executeMELScript();
 
+    Smear::loadCache("C:\\Users\\Admin\\Documents\\School\\cis-6600-advanced-topics-in-computer-graphics\\SMEARin\\smearin\\cache\\cache.json"); 
+
     return MStatus::kSuccess;
 }
 

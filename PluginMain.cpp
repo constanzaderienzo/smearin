@@ -15,6 +15,27 @@
 #include "smearControlNode.h"
 #include "motionLinesNode.h"
 
+/*
+================================================================================
+This plugin uses Python scripts that require NumPy. To ensure Maya can import
+NumPy inside its embedded Python (mayapy), follow these steps:
+
+1. Open an **elevated command prompt** (Run as Administrator):
+   - Press Start
+   - Search for "CMD"
+   - Right-click and select "Run as administrator"
+
+2. Navigate to Maya's Python directory:
+   For example, for Maya 2023:
+       cd "C:\Program Files\Autodesk\Maya2023\bin"
+
+3. Install NumPy using mayapy:
+       mayapy -m pip install numpy
+
+This will install NumPy into Maya's embedded Python environment.
+================================================================================
+*/
+
 class PluginMain : public MPxCommand {
 private: 
     MColor PluginMain::motionOffsetToColor(const MVector& offset) {

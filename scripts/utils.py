@@ -72,11 +72,6 @@ def get_anim_vertices_and_joints_maya(start_frame, end_frame):
     return anim_vertices, anim_joints
 
 def get_skin_weights(mesh, skin_cluster, joints):
-    import maya.api.OpenMaya as om
-    import maya.api.OpenMayaAnim as oma
-    import maya.cmds as cmds
-    import numpy as np
-
     # --- column index for each joint --------------------------
     col_of_joint = {j: idx for idx, j in enumerate(joints)}
 
@@ -187,3 +182,86 @@ def slerp(v0, v1, t):
         return normalize((1.0 - t) * v0 + t * v1)   # fallback to lerp
     so = np.sin(omega)
     return (np.sin((1.0 - t) * omega) / so) * v0 + (np.sin(t * omega) / so) * v1
+
+import numpy as np
+
+def build_deltas(verts, joints, weights_arr, joints_list, window=2):
+    frames = sorted(verts.keys())
+    num_frames = len(frames)
+    num_verts = len(verts[frames[0]])
+    num_joints = len(joints_list)
+
+    deltas = {}  # final result: deltas[frame][v] = scalar motion offset
+
+    for f in frames:
+        print(f"[INFO] Processing frame {f}")
+        deltas[f] = np.zeros(num_verts, dtype=np.float32)
+
+        for k, joint_name in enumerate(joints_list):
+            if joint_name not in joints[f]:
+                continue
+
+            # Current bone
+            head = joints[f][joint_name][0]
+            tail = joints[f][joint_name][1]
+            axis = tail - head
+            axis_norm = np.linalg.norm(axis)
+            if axis_norm < 1e-5:
+                continue
+            b_hat = axis / axis_norm
+            length = axis_norm
+
+            # Velocity direction from neighbor frames
+            if f > frames[0] and f < frames[-1]:
+                v0 = joints[f+1][joint_name][0] - joints[f-1][joint_name][0]
+                v1 = joints[f+1][joint_name][1] - joints[f-1][joint_name][1]
+            elif f == frames[0]:
+                v0 = joints[f+1][joint_name][0] - joints[f][joint_name][0]
+                v1 = joints[f+1][joint_name][1] - joints[f][joint_name][1]
+            else:
+                v0 = joints[f][joint_name][0] - joints[f-1][joint_name][0]
+                v1 = joints[f][joint_name][1] - joints[f-1][joint_name][1]
+
+            v0_hat = v0 / (np.linalg.norm(v0) + 1e-8)
+            v1_hat = v1 / (np.linalg.norm(v1) + 1e-8)
+
+            for v in range(num_verts):
+                p = verts[f][v]
+                w = weights_arr[v, k]
+                if w == 0.0:
+                    continue
+
+                proj = np.dot(p - head, b_hat) / length
+                u = np.clip(proj, 0.0, 1.0)
+                u_smooth = 3*u**2 - 2*u**3  # smoothstep
+
+                # SLERP-like lerp fallback
+                v_hat = (1 - u_smooth) * v0_hat + u_smooth * v1_hat
+                v_hat = v_hat / (np.linalg.norm(v_hat) + 1e-8)
+
+                # Ribbon normal
+                v_dot_b = np.dot(v_hat, b_hat)
+                n_hat = v_hat - v_dot_b * b_hat
+                n_hat_norm = np.linalg.norm(n_hat)
+                if n_hat_norm < 1e-8:
+                    continue
+                n_hat /= n_hat_norm
+
+                # Raw delta
+                delta_raw = np.dot(p - head, n_hat)
+
+                # Colinearity weight
+                w_col = 1.0 - v_dot_b**2
+
+                # For now skip M_ik normalization, just store weighted result
+                deltas[f][v] += w * w_col * delta_raw
+
+    # Temporal smoothing (Eq 2)
+    print("[INFO] Smoothing in time...")
+    kernel = np.array([(1 - (n/(window+1))**2)**2 for n in range(-window, window+1)])
+    kernel /= kernel.sum()
+
+    all_deltas = np.array([deltas[f] for f in frames])
+    smoothed = np.apply_along_axis(lambda m: np.convolve(m, kernel, mode='same'), axis=0, arr=all_deltas)
+
+    return {frame: smoothed[i] for i, frame in enumerate(frames)}

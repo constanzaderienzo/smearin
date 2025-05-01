@@ -9,6 +9,10 @@
 #include <maya/MPointArray.h>
 #include <maya/MDoubleArray.h>
 #include <maya/MDagPath.h>
+#include <unordered_map>
+#include <fstream>  
+#include "json.hpp"
+using json = nlohmann::json;
 
 using std::cout;
 using std::endl;
@@ -19,6 +23,13 @@ struct MotionOffsetsSimple {
     std::vector<MDoubleArray> motionOffsets;  // 2D: motionOffsets[frame][vertex]
     std::vector<MPointArray> vertexTrajectories; // Store per-vertex trajectory
 };
+
+struct FrameCache {
+    std::vector<MPoint> positions;     // Vertex world positions
+    MDoubleArray motionOffsets;        // Optional: scalar offset per vertex
+    bool loaded = false;
+};
+
 struct BoneData {
     MPoint rootPos;
     MPoint tipPos;
@@ -49,4 +60,12 @@ public:
     static MStatus getSkinClusterAndBones(const MDagPath& meshPath, MObject& skinClusterObj, MDagPathArray& influenceBones);
     static MTimeArray getAnimationRange();
 
+    std::unordered_map<int, FrameCache> vertexCache;
+    int vertexCount = 0;
+    MString lastCachePath;
+
+    bool loadVertexCache(const MString& cachePath);
+    void clearVertexCache();
+
+    MotionOffsetsSimple motionOffsets;
 };

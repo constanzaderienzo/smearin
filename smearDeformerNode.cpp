@@ -102,43 +102,8 @@ MStatus SmearDeformerNode::initialize()
 }
 
 MStatus SmearDeformerNode::deformSimple(MDataBlock& block, MItGeometry& iter, MDagPath& meshPath, MDagPath& transformPath) {
-    MStatus status;
-    double currentFrame = block.inputValue(time, &status).asTime().as(MTime::kFilm);
-    int frameIndex = static_cast<int>(currentFrame - motionOffsets.startFrame);
-    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) return MS::kSuccess;
-    applyDeformation(iter, frameIndex);
-    return MS::kSuccess;
 }
-
-// Updated deformArticulated() to use motion offsets (TODO: blend per-bone offsets)
 MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter, MDagPath& meshPath) {
-    MStatus status;
-    if (!skinDataBaked) {
-        // ... [existing skin cluster extraction code remains unchanged] ...
-    }
-
-    // This is where you'd compute per-vertex δᵢ based on bone velocities & influence
-    // For now, just fallback to simple deformation using precomputed offsets
-    double currentFrame = MAnimControl::currentTime().as(MTime::kFilm);
-    int frameIndex = static_cast<int>(currentFrame - motionOffsets.startFrame);
-    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) return MS::kSuccess;
-    applyDeformation(iter, frameIndex);
-    return MStatus::kSuccess;
-}
-
-MString createCachePath(const MString& meshName) {
-    // Get current working directory
-    fs::path cwd = fs::current_path();  // e.g., C:/Users/.../smearin/build
-    MString basePath(cwd.u8string().c_str());
-
-    // Clean the mesh name
-    MString cleanName = meshName;
-    cleanName.substitute("|", "_");
-    cleanName.substitute(":", "_");
-
-    // Build final path
-    MString cachePath = basePath + "/vertex_cache_" + cleanName + ".json";
-    return cachePath;
 }
 
 MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
@@ -259,68 +224,6 @@ MStatus SmearDeformerNode::getDagPaths(MDataBlock& block, MItGeometry iter, unsi
     transformPath.pop(); // Removes the shape node, leaving the transform 
 
     return status;
-}
-
-// Updated loadVertexCache to also parse startFrame
-bool SmearDeformerNode::loadVertexCache(const MString& cachePath) {
-    if (lastCachePath == cachePath && !vertexCache.empty()) return true;
-    clearVertexCache();
-    lastCachePath = cachePath;
-
-    try {
-        std::ifstream file(cachePath.asChar());
-        if (!file.is_open()) return false;
-
-        json data;
-        file >> data;
-
-        if (!data.contains("vertex_count") || !data.contains("frames")) return false;
-
-        vertexCount = data["vertex_count"];
-        motionOffsets.startFrame = data.value("start_frame", 0);
-
-        for (auto& [frameStr, positions] : data["frames"].items()) {
-            int frame = std::stoi(frameStr);
-            FrameCache frameCache;
-            frameCache.positions.reserve(vertexCount);
-            for (auto& pos : positions) {
-                frameCache.positions.emplace_back(pos[0], pos[1], pos[2]);
-            }
-            vertexCache[frame] = std::move(frameCache);
-        }
-
-        if (data.contains("motion_offsets")) {
-            for (auto& [frameStr, offsets] : data["motion_offsets"].items()) {
-                int frame = std::stoi(frameStr);
-                MDoubleArray offsetArr;
-                for (auto& val : offsets) offsetArr.append(val);
-                motionOffsets.motionOffsets[frame] = offsetArr;
-            }
-        }
-
-        // Rebuild vertexTrajectories as a frame-indexed vector for splines
-        motionOffsets.vertexTrajectories.clear();
-        for (int i = 0; i < vertexCache.size(); ++i) {
-            MPointArray arr;
-            for (const auto& pt : vertexCache[motionOffsets.startFrame + i].positions) {
-                arr.append(pt);
-            }
-            motionOffsets.vertexTrajectories.push_back(arr);
-        }
-
-        return true;
-    }
-    catch (const std::exception& e) {
-        MGlobal::displayError(MString("Cache loading failed: ") + e.what());
-        clearVertexCache();
-        return false;
-    }
-}
-
-void SmearDeformerNode::clearVertexCache() {
-    vertexCache.clear();
-    vertexCount = 0;
-    lastCachePath = "";
 }
 
 // General deformation application using offsets + trajectories

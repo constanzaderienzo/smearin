@@ -6,11 +6,7 @@
 #include <maya/MDagPathArray.h>
 #include <maya/MVector.h>
 #include <vector>
-#include <unordered_map>
 #include "smear.h"
-#include <fstream>  
-#include "json.hpp"
-using json = nlohmann::json;
 
 
 /*
@@ -21,11 +17,6 @@ connectAttr "time1.outTime" "SmearDeformerNode1.time";
 struct InfluenceData {
     uint influenceIndex;
     float weight;
-};
-
-struct FrameCache {
-    std::vector<MPoint> positions;
-    bool loaded = false;
 };
 
 class SmearDeformerNode : public MPxDeformerNode
@@ -79,13 +70,6 @@ private:
     double elongationStrengthFuture;
     bool smoothingEnabled;
     int N;
-
-    std::unordered_map<int, FrameCache> vertexCache;
-    int vertexCount = 0;
-    MString lastCachePath;
-
-    bool loadVertexCache(const MString& cachePath);
-    void clearVertexCache();
 
     // Interpolation helper
     MPoint catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t);

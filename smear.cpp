@@ -665,3 +665,85 @@ MStatus Smear::getSkinClusterAndBones(const MDagPath& inputPath,
     MGlobal::displayError("No matching skinCluster found for mesh: " + meshPath.fullPathName());
     return MS::kFailure;
 }
+
+MString createCachePath(const MString& meshName) {
+    // Get current working directory
+    fs::path cwd = fs::current_path();
+    MString basePath(cwd.u8string().c_str());
+
+    // Clean the mesh name
+    MString cleanName = meshName;
+    cleanName.substitute("|", "_");
+    cleanName.substitute(":", "_");
+
+    // Build final path
+    MString cachePath = basePath + "/vertex_cache_" + cleanName + ".json";
+    return cachePath;
+}
+
+bool Smear::loadVertexCache(const MString& cachePath) {
+    if (lastCachePath == cachePath && !vertexCache.empty()) return true;
+    clearVertexCache();
+    lastCachePath = cachePath;
+
+    try {
+        std::ifstream file(cachePath.asChar());
+        if (!file.is_open()) return false;
+
+        json data;
+        file >> data;
+
+        if (!data.contains("vertex_count") || !data.contains("vertex_trajectories")) return false;
+
+        vertexCount = data["vertex_count"];
+        int startFrame = data.value("start_frame", 0);
+        int endFrame = data.value("end_frame", startFrame);
+
+        // Load vertex trajectories
+        for (auto& [frameStr, positions] : data["vertex_trajectories"].items()) {
+            int frame = std::stoi(frameStr);
+            FrameCache frameCache;
+            frameCache.positions.reserve(vertexCount);
+            for (auto& pos : positions) {
+                frameCache.positions.emplace_back(pos[0], pos[1], pos[2]);
+            }
+            vertexCache[frame] = std::move(frameCache);
+        }
+
+        // Load motion offsets (optional)
+        if (data.contains("motion_offsets")) {
+            for (auto& [frameStr, offsets] : data["motion_offsets"].items()) {
+                int frame = std::stoi(frameStr);
+                MDoubleArray offsetArr;
+                for (auto& val : offsets) offsetArr.append(val);
+                motionOffsets.motionOffsets[frame] = offsetArr;
+            }
+        }
+
+        // Rebuild vertexTrajectories for spline interpolation
+        motionOffsets.vertexTrajectories.clear();
+        for (int f = motionOffsets.startFrame; f <= endFrame; ++f) {
+            MPointArray arr;
+            const auto it = vertexCache.find(f);
+            if (it != vertexCache.end()) {
+                for (const auto& pt : it->second.positions) {
+                    arr.append(pt);
+                }
+            }
+            motionOffsets.vertexTrajectories.push_back(arr);
+        }
+
+        return true;
+    }
+    catch (const std::exception& e) {
+        MGlobal::displayError(MString("Cache loading failed: ") + e.what());
+        clearVertexCache();
+        return false;
+    }
+}
+
+void Smear::clearVertexCache() {
+    vertexCache.clear();
+    vertexCount = 0;
+    lastCachePath = "";
+}

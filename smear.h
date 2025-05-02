@@ -10,6 +10,7 @@
 #include <maya/MDoubleArray.h>
 #include <maya/MDagPath.h>
 #include <vector>
+#include <unordered_map> 
 #include <fstream>  
 #include "json.hpp"
 
@@ -61,7 +62,7 @@ public:
     static MStatus getSkinClusterAndBones(const MDagPath& meshPath, MObject& skinClusterObj, MDagPathArray& influenceBones);
     static MTimeArray getAnimationRange();
 
-    static std::vector<FrameCache> vertexCache;
+    static std::unordered_map<int, FrameCache> vertexCache;
     static int vertexCount;
     static MString lastCachePath;
 

@@ -28,7 +28,7 @@ namespace fs = std::filesystem;
         return MS::kFailure;        \
     }
 
-std::vector<FrameCache> Smear::vertexCache;
+std::unordered_map<int, FrameCache> Smear::vertexCache;
 int   Smear::vertexCount = 0;
 MString Smear::lastCachePath = "";
 
@@ -715,13 +715,16 @@ bool Smear::loadCache(const MString& cachePath)
         int numFrames = endFrame - startFrame + 1;
 
         vertexCache.clear();
-        vertexCache.resize(numFrames);
         //----------------------- vertex positions ---------------------
         const json& vertex_trajectories = data["vertex_trajectories"];
         for (const auto& [frameStr, positions] : vertex_trajectories.items())
         {
             int frame = std::stoi(frameStr);
             int idx = frame - startFrame;
+
+            if (vertexCache.find(idx) == vertexCache.end()) {
+                vertexCache.insert({ idx, FrameCache() });
+            }
 
             FrameCache& fCache = vertexCache[idx];
             fCache.positions.reserve(vertexCount);

@@ -40,7 +40,11 @@ def get_joint_head_tail(joint, frame):
 
 def get_vertex_positions(mesh, frame):
     # Set the current time to the desired frame
-    cmds.currentTime(frame)
+    cmds.currentTime(frame + 0.1, edit=True)
+    cmds.currentTime(frame, edit=True)
+
+    cmds.dgdirty(allPlugs=True)
+    cmds.refresh(force=True)
 
     # Print debug info
     current_time = cmds.currentTime(query=True)
@@ -52,6 +56,9 @@ def get_vertex_positions(mesh, frame):
     dag_path = sel.getDagPath(0)
 
     # Get vertex positions in world space
+    mesh_fn = om.MFnMesh(dag_path)
+    verts = mesh_fn.getPoints(space=om.MSpace.kWorld)
+
     mesh_fn = om.MFnMesh(dag_path)
     verts = mesh_fn.getPoints(space=om.MSpace.kWorld)
 
@@ -290,7 +297,10 @@ def cache_vertex_trajectories_with_deltas(mesh_name, output_path):
 
     # Compute deltas
     deltas = build_deltas(verts, joints, weights_arr, joints_list)
-
+    max_mag = max(
+    np.max(np.abs(frame_deltas))
+        for frame_deltas in deltas.values()
+    )
     # Prepare final export structure
     vertex_count = len(verts[start])
     vertex_trajectories = {}
@@ -299,7 +309,10 @@ def cache_vertex_trajectories_with_deltas(mesh_name, output_path):
     for frame in frames:
         frame_str = str(frame)
         vertex_trajectories[frame_str] = verts[frame].tolist()
-        motion_offsets[frame_str] = deltas[frame].tolist()
+        if max_mag > 1e-6:
+            motion_offsets[frame_str] = (np.array(deltas[frame]) / max_mag).tolist()
+        else:
+            motion_offsets[frame_str] = deltas[frame].tolist()
 
     data = {
         "vertex_count": vertex_count,

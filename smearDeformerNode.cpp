@@ -225,31 +225,30 @@ MStatus SmearDeformerNode::deformArticulated(MDataBlock& block, MItGeometry& ite
     //// 4) now for each vertex
     for (; !iter.isDone(); iter.next()) {
         int vid = iter.index();
-        //double delta = deltas[vid];
+        double delta = deltas[vid];
 
         // compute the “baked” displacement amount
-        //double beta = delta *(delta < 0 ? sPast : sFut);
+        double beta = delta *(delta < 0 ? sPast : sFut);
 
         // determine which segment of the trajectory to sample
-        // β∈[−1,1] → if β≥0 we move toward next frame, else toward prev
-        //int   baseFrame = frame + (int)std::floor(beta);
-        //double u = beta - std::floor(beta);
+         //β∈[−1,1] → if β≥0 we move toward next frame, else toward prev
+        int   baseFrame = frame + (int)std::floor(beta);
+        double u = beta - std::floor(beta);
 
         // control points for Catmull‑Rom: p0,p1,p2,p3
-        //MPoint p0 = getPos(baseFrame - 1, vid);
-        //MPoint p1 = getPos(baseFrame, vid);
-        //MPoint p2 = getPos(baseFrame + 1, vid);
-        //MPoint p3 = getPos(baseFrame + 2, vid);
+        MPoint p0 = getPos(baseFrame - 1, vid);
+        MPoint p1 = getPos(baseFrame, vid);
+        MPoint p2 = getPos(baseFrame + 1, vid);
+        MPoint p3 = getPos(baseFrame + 2, vid);
 
         // evaluate spline
-        //MPoint newP = catmullRomInterpolate(p0, p1, p2, p3, (float)u);
+        MPoint newP = catmullRomInterpolate(p0, p1, p2, p3, (float)u);
 
         // set the vertex
-        //iter.setPosition(newP);
+        iter.setPosition(newP);
         
-        iter.setPosition(getPos(frame, vid));
+        //iter.setPosition(getPos(frame, vid));
     }
-
 
     return MS::kSuccess;
 }

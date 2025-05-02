@@ -712,53 +712,37 @@ bool Smear::loadCache(const MString& cachePath)
         int startFrame = data.value("start_frame", 0);
         int endFrame = data.value("end_frame", startFrame);
 
+        int numFrames = endFrame - startFrame + 1;
+
+        vertexCache.clear();
+        vertexCache.resize(numFrames);
         //----------------------- vertex positions ---------------------
         const json& vertex_trajectories = data["vertex_trajectories"];
         for (const auto& [frameStr, positions] : vertex_trajectories.items())
         {
-            FrameCache fCache;
+            int frame = std::stoi(frameStr);
+            int idx = frame - startFrame;
+
+            FrameCache& fCache = vertexCache[idx];
             fCache.positions.reserve(vertexCount);
 
             for (const auto& pos : positions)
                 fCache.positions.emplace_back(pos[0], pos[1], pos[2]);
-
-            vertexCache.push_back(std::move(fCache));
         }
 
         //----------------------- motion offsets ------------
         for (const auto& [frameStr, offsets] : data["motion_offsets"].items())
         {
             int frame = std::stoi(frameStr);
+            int idx = frame - startFrame;
 
-            vertexCache[frame].motionOffsets.setLength(offsets.size());
+            FrameCache& fCache = vertexCache[idx];
+            fCache.motionOffsets.setLength(offsets.size());
+
             for (unsigned i = 0; i < offsets.size(); ++i)
             {
-                vertexCache[frame].motionOffsets[i] = offsets[i];
+                fCache.motionOffsets[i] = offsets[i];
             }
-        }
-
-        std::cout << "[SMEARin] loadCache pushed "
-            << vertexCache.size() << " frames\n";
-
-        if (vertexCache.size() > 10 && vertexCache[2].positions.size() == vertexCache[10].positions.size()) {
-            bool identical = true;
-            for (unsigned i = 0; i < vertexCache[2].positions.size(); ++i) {
-                const MPoint& p2 = vertexCache[2].positions[i];
-                const MPoint& p10 = vertexCache[10].positions[i];
-
-                if ((p2 - p10).length() > 1e-6) {
-                    identical = false;
-                    break;
-                }
-            }
-
-            if (identical)
-                MGlobal::displayInfo("✅ Frame 2 and Frame 10 positions are IDENTICAL.");
-            else
-                MGlobal::displayInfo("⚠️ Frame 2 and Frame 10 positions are DIFFERENT.");
-        }
-        else {
-            MGlobal::displayError("❌ Cannot compare frame 2 and 10: insufficient data or mismatched vertex counts.");
         }
 
         return true;

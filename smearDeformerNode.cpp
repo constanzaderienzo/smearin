@@ -189,63 +189,60 @@ MStatus SmearDeformerNode::deformSimple(MDataBlock& block, MItGeometry& iter, MD
     return MStatus::kSuccess;
 }
 
-MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter, MDagPath& meshPath) {
-    MStatus status;
+MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter,
+    MDagPath& meshPath)
+{
+    // 1) grab the current frame
+    double t = MAnimControl::currentTime().as(MTime::uiUnit());
+    int frame = (int)std::round(t);
 
-    if (!skinDataBaked) {
-        MGlobal::displayInfo("Calculating skin data.");
-        // 1. Get skinCluster and influence bones
-        MObject skinClusterObj;
-        MDagPathArray influenceBones;
-        status = Smear::getSkinClusterAndBones(meshPath, skinClusterObj, influenceBones);
-        if (!status) return status;
+    // assume Smear::vertexCache[f] corresponds to Maya frame f
+    if (frame < 0 || frame >= (int)Smear::vertexCache.size())
+        return MS::kFailure;
+    const FrameCache& fc = Smear::vertexCache[frame];
 
-        MFnSkinCluster skinFn(skinClusterObj, &status);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
+    // references to the cached data
+    const auto& basePos = fc.positions;      // vector<MPoint>
+    const auto& deltas = fc.motionOffsets;  // MDoubleArray
 
-        // 2. Create full vertex component
-        MFnSingleIndexedComponent compFn;
-        MObject vertexComp = compFn.create(MFn::kMeshVertComponent, &status);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
+    // 2) artist parameters (read earlier in deform() and stored in members)
+    double sPast = elongationStrengthPast;
+    double sFut = elongationStrengthFuture;
 
-        uint numVertices = iter.count(&status);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
+    // 3) for Catmull‑Rom we need positions at f−1,f,f+1,f+2
+    auto getPos = [&](int fIdx, int vid)->MPoint {
+        // clamp to valid range
+        fIdx = std::clamp(fIdx, 0, (int)Smear::vertexCache.size() - 1);
+        return Smear::vertexCache[fIdx].positions[vid];
+        };
 
-        for (uint i = 0; i < numVertices; ++i) {
-            compFn.addElement(i);
-        }
+    // 4) now for each vertex
+    for (; !iter.isDone(); iter.next()) {
+        int vid = iter.index();
+        double δ = deltas[vid];
 
-        // 3. Get all weights for all influences on all vertices
-        uint numInfluences;
-        MDoubleArray weights;
+        // compute the “baked” displacement amount
+        double β = δ * (δ < 0 ? sPast : sFut);
 
-        MDagPath skinnedPath;
-        status = skinFn.getPathAtIndex(0, skinnedPath);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
+        // determine which segment of the trajectory to sample
+        // β∈[−1,1] → if β≥0 we move toward next frame, else toward prev
+        int   baseFrame = frame + (int)std::floor(β);
+        double u = β - std::floor(β);
 
-        status = skinFn.getWeights(skinnedPath, vertexComp, weights, numInfluences);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
+        // control points for Catmull‑Rom: p0,p1,p2,p3
+        MPoint p0 = getPos(baseFrame - 1, vid);
+        MPoint p1 = getPos(baseFrame, vid);
+        MPoint p2 = getPos(baseFrame + 1, vid);
+        MPoint p3 = getPos(baseFrame + 2, vid);
 
-        // 4. Reshape into per-vertex storage
-        vertexWeights.clear();
-        vertexWeights.resize(numVertices);
+        // evaluate spline
+        MPoint newP = catmullRomInterpolate(p0, p1, p2, p3, (float)u);
 
-        for (uint v = 0; v < numVertices; ++v) {
-            std::vector<InfluenceData> influences;
-
-            for (uint j = 0; j < numInfluences; ++j) {
-                float w = static_cast<float>(weights[v * numInfluences + j]);
-                if (w > 0.001f) {  // ignore negligible weights
-                    influences.push_back({ j, w });
-                }
-            }
-            vertexWeights[v] = influences;
-        }
-
-        skinDataBaked = true;
-        MGlobal::displayInfo("Skin weights initialized and cached.");
+        // set the vertex
+        iter.setPosition(newP);
     }
-    return MStatus::kSuccess;
+
+    return MS::kSuccess;
 }
 
 MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)

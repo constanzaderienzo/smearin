@@ -28,9 +28,9 @@ namespace fs = std::filesystem;
         return MS::kFailure;        \
     }
 
-int Smear::vertexCount = 0;
 std::vector<FrameCache> Smear::vertexCache;
-MString Smear::lastCachePath;
+int   Smear::vertexCount = 0;
+MString Smear::lastCachePath = "";
 
 MTimeArray Smear::getAnimationRange() {
     MTimeArray timeArray;
@@ -737,6 +737,8 @@ bool Smear::loadCache(const MString& cachePath)
             }
         }
 
+        std::cout << "[SMEARin] loadCache pushed "
+            << vertexCache.size() << " frames\n";
         return true;
     }
 

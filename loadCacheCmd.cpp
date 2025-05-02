@@ -12,6 +12,8 @@ MStatus LoadCacheCmd::doIt(const MArgList& args) {
 
     if (success) {
         MGlobal::displayInfo("SMEARin: Cache loaded successfully.");
+        MGlobal::displayInfo(MString("[SMEARin] C++ loadCache succeeded; got ")
+            + Smear::vertexCache.size() + " frames.");
         return MS::kSuccess;
     }
     else {

@@ -181,11 +181,11 @@ MStatus executeMELScript() {
                 connectControl "applyElongationCheckbox" "smearControl1.applyElongation";
 
                 // Create a slider for Past Strength (attribute smearControl1.sp)
-                floatSliderGrp -label "Past Strength:" -field true -min 0 -max 5 pastStrengthSlider;
+                floatSliderGrp -label "Past Strength:" -field true -min 0 -max 150 pastStrengthSlider;
                 connectControl "pastStrengthSlider" "smearControl1.sp";
 
                 // Create a slider for Future Strength (attribute smearControl1.sf)
-                floatSliderGrp -label "Future Strength:" -field true -min 0 -max 5 futureStrengthSlider;
+                floatSliderGrp -label "Future Strength:" -field true -min 0 -max 150 futureStrengthSlider;
                 connectControl "futureStrengthSlider" "smearControl1.sf";
 
                 // Create a slider for Smooth Window (attribute smearControl1.sw)
@@ -209,12 +209,12 @@ MStatus executeMELScript() {
                 
                 // Create a slider for Motion Lines Past Strength 
                 // (assumed attribute name: smearControl1.motionLinesStrengthPast)
-                floatSliderGrp -label "Motion Lines Past Strength:" -field true -min 0 -max 5 motionLinesPastStrengthSlider;
+                floatSliderGrp -label "Motion Lines Past Strength:" -field true -min 0 -max 150 motionLinesPastStrengthSlider;
                 connectControl "motionLinesPastStrengthSlider" "smearControl1.motionLinesStrengthPast";
 
                 // Create a slider for Motion Lines Future Strength
                 // (assumed attribute name: smearControl1.motionLinesStrengthFuture)
-                floatSliderGrp -label "Motion Lines Future Strength:" -field true -min 0 -max 5 motionLinesFutureStrengthSlider;
+                floatSliderGrp -label "Motion Lines Future Strength:" -field true -min 0 -max 150 motionLinesFutureStrengthSlider;
                 connectControl "motionLinesFutureStrengthSlider" "smearControl1.motionLinesStrengthFuture";
 
                 // Create a slider for Motion Lines Smooth Window

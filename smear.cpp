@@ -36,15 +36,15 @@ MTimeArray Smear::getAnimationRange() {
     MTimeArray timeArray;
     MStatus status;
 
-    MGlobal::displayInfo("===== Extracting Animation Range =====");
+    //MGlobal::displayInfo("===== Extracting Animation Range =====");
 
     // Get start/end from Maya's timeline
     MTime startTime = MAnimControl::minTime();
     MTime endTime = MAnimControl::maxTime();
 
-    MGlobal::displayInfo(MString("Timeline Range: ") +
-        startTime.value() + " to " + endTime.value() +
-        " (in " + startTime.unit() + ")");
+    //MGlobal::displayInfo(MString("Timeline Range: ") +
+        //startTime.value() + " to " + endTime.value() +
+        //" (in " + startTime.unit() + ")");
 
     // Convert to frame numbers
     double startFrame = startTime.as(MTime::kFilm);
@@ -61,7 +61,7 @@ MTimeArray Smear::getAnimationRange() {
         timeArray.append(MTime(frame, MTime::kFilm));
     }
 
-    MGlobal::displayInfo(MString("Generated ") + (int)timeArray.length() + " frames");
+    //MGlobal::displayInfo(MString("Generated ") + (int)timeArray.length() + " frames");
     return timeArray;
 }
 
@@ -205,7 +205,7 @@ bool compareTransformComponents(MTransformationMatrix::RotationOrder rotOrder, c
         msg += "  Translation match: " + MString(translationMatch ? "PASS" : "FAIL") + "\n";
         msg += "  Rotation match   : " + MString(rotationMatch ? "PASS" : "FAIL") + "\n";
         msg += "  Scale match      : " + MString(scaleMatch ? "PASS" : "FAIL");
-        MGlobal::displayInfo(msg);
+        //MGlobal::displayInfo(msg);
     }
 
     return translationMatch && rotationMatch && scaleMatch;
@@ -589,11 +589,11 @@ MStatus Smear::getSkeletonInformation()
         }
 
         const double conversion = (180.0 / 3.141592653589793238463);
-        MGlobal::displayInfo(MString("Joint: ") + jointName +
-            " | Parent: " + parentName +
-            " | Rotation: (" + rotation[0] * conversion + ", " + rotation[1] * conversion + ", " + rotation[2] * conversion + ")" +
-            " | Scale: (" + scale[0] + ", " + scale[1] + ", " + scale[2] + ")" +
-            " | Position: (" + jointPos.x + ", " + jointPos.y + ", " + jointPos.z + ")");
+        //MGlobal::displayInfo(MString("Joint: ") + jointName +
+            //" | Parent: " + parentName +
+            //" | Rotation: (" + rotation[0] * conversion + ", " + rotation[1] * conversion + ", " + rotation[2] * conversion + ")" +
+            //" | Scale: (" + scale[0] + ", " + scale[1] + ", " + scale[2] + ")" +
+            //" | Position: (" + jointPos.x + ", " + jointPos.y + ", " + jointPos.z + ")");
         
     }
 }
@@ -657,7 +657,7 @@ MStatus Smear::getSkinClusterAndBones(const MDagPath& inputPath,
                     return status;
                 }
 
-                MGlobal::displayInfo("Found skinCluster: " + MFnDependencyNode(skinClusterObj).name());
+                //MGlobal::displayInfo("Found skinCluster: " + MFnDependencyNode(skinClusterObj).name());
                 return MS::kSuccess;
             }
         }

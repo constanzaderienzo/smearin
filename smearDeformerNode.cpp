@@ -31,7 +31,7 @@ MObject SmearDeformerNode::smoothEnabled;
 MObject SmearDeformerNode::aelongationStrengthPast;
 MObject SmearDeformerNode::aelongationStrengthFuture; 
 MObject SmearDeformerNode::aApplyElongation;
-MObject SmearDeformerNode::trigger;
+MObject SmearDeformerNode::aCacheLoaded;
 
 // Message attribute for connecting to the control node.
 MObject SmearDeformerNode::inputControlMsg;
@@ -56,10 +56,11 @@ MStatus SmearDeformerNode::initialize()
     MFnMessageAttribute mAttr;  // For message attributes
     MStatus status;
 
-    trigger = numAttr.create("trigger", "trg", MFnNumericData::kBoolean);
-    addAttribute(trigger);
+    aCacheLoaded = numAttr.create("cacheLoaded", "cl", MFnNumericData::kBoolean, false, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    addAttribute(aCacheLoaded);
 
-    // Time attribute
+    // Time attribute 
     time = unitAttr.create("time", "tm", MFnUnitAttribute::kTime, 0.0);
     addAttribute(time);
 
@@ -189,16 +190,21 @@ MStatus SmearDeformerNode::deformSimple(MDataBlock& block, MItGeometry& iter, MD
     return MStatus::kSuccess;
 }
 
-MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter,
+MStatus SmearDeformerNode::deformArticulated(MDataBlock& block, MItGeometry& iter,
     MDagPath& meshPath)
 {
-    // 1) grab the current frame
-    double t = MAnimControl::currentTime().as(MTime::uiUnit());
-    int frame = (int)std::round(t);
+    MStatus status;
 
-    // assume Smear::vertexCache[f] corresponds to Maya frame f
+    MDataHandle timeDataHandle = block.inputValue(time, &status);
+    McheckErr(status, "Failed to obtain data handle for time input");
+    MTime currentTime = timeDataHandle.asTime();
+    double frameD = currentTime.as(MTime::kFilm); 
+    int frame = static_cast<int>(frameD);
+
+    // assume Smear::vertexCache[f] corresponds to Maya frame f <- NOT TRUE ANYMORE SINCE WE ARE USING VECTOR INSTEAD OF MAP 
     if (frame < 0 || frame >= (int)Smear::vertexCache.size())
         return MS::kFailure;
+
     const FrameCache& fc = Smear::vertexCache[frame];
 
     // references to the cached data
@@ -216,31 +222,34 @@ MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter,
         return Smear::vertexCache[fIdx].positions[vid];
         };
 
-    // 4) now for each vertex
+    //// 4) now for each vertex
     for (; !iter.isDone(); iter.next()) {
         int vid = iter.index();
-        double δ = deltas[vid];
+        //double delta = deltas[vid];
 
         // compute the “baked” displacement amount
-        double β = δ * (δ < 0 ? sPast : sFut);
+        //double beta = delta *(delta < 0 ? sPast : sFut);
 
         // determine which segment of the trajectory to sample
         // β∈[−1,1] → if β≥0 we move toward next frame, else toward prev
-        int   baseFrame = frame + (int)std::floor(β);
-        double u = β - std::floor(β);
+        //int   baseFrame = frame + (int)std::floor(beta);
+        //double u = beta - std::floor(beta);
 
         // control points for Catmull‑Rom: p0,p1,p2,p3
-        MPoint p0 = getPos(baseFrame - 1, vid);
-        MPoint p1 = getPos(baseFrame, vid);
-        MPoint p2 = getPos(baseFrame + 1, vid);
-        MPoint p3 = getPos(baseFrame + 2, vid);
+        //MPoint p0 = getPos(baseFrame - 1, vid);
+        //MPoint p1 = getPos(baseFrame, vid);
+        //MPoint p2 = getPos(baseFrame + 1, vid);
+        //MPoint p3 = getPos(baseFrame + 2, vid);
 
         // evaluate spline
-        MPoint newP = catmullRomInterpolate(p0, p1, p2, p3, (float)u);
+        //MPoint newP = catmullRomInterpolate(p0, p1, p2, p3, (float)u);
 
         // set the vertex
-        iter.setPosition(newP);
+        //iter.setPosition(newP);
+        
+        iter.setPosition(getPos(frame, vid));
     }
+
 
     return MS::kSuccess;
 }
@@ -272,7 +281,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
         deformSimple(block, iter, meshPath, transformPath);
     }
     else {
-        deformArticulated(iter, meshPath);
+        deformArticulated(block, iter, meshPath);
     }
 
     return MS::kSuccess();

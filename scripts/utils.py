@@ -39,13 +39,22 @@ def get_joint_head_tail(joint, frame):
     return np.array(head_pos), np.array(tail_pos)
 
 def get_vertex_positions(mesh, frame):
+    # Set the current time to the desired frame
     cmds.currentTime(frame)
+
+    # Print debug info
+    current_time = cmds.currentTime(query=True)
+    print(f"[DEBUG] Requested frame: {frame}, Maya currentTime: {current_time}")
+
+    # Get the mesh DAG path
     sel = om.MSelectionList()
     sel.add(mesh)
     dag_path = sel.getDagPath(0)
-    mesh_fn = om.MFnMesh(dag_path)
 
+    # Get vertex positions in world space
+    mesh_fn = om.MFnMesh(dag_path)
     verts = mesh_fn.getPoints(space=om.MSpace.kWorld)
+
     return np.array([[v.x, v.y, v.z] for v in verts])
 
 def get_anim_vertices_and_joints_maya(start_frame, end_frame):

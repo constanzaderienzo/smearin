@@ -32,7 +32,7 @@ public:
     static MObject aelongationStrengthPast;
     static MObject aelongationStrengthFuture; 
     static MObject aApplyElongation; 
-    static MObject trigger;
+    static MObject aCacheLoaded;
 
 
     // Message attribute for connecting the control node.
@@ -52,7 +52,7 @@ public:
         unsigned int multiIndex) override;
     void applyDeformation(MItGeometry& iter, int frameIndex);
     MStatus deformSimple(MDataBlock& block, MItGeometry& iter, MDagPath& meshPath, MDagPath& transformPath);
-    MStatus deformArticulated(MItGeometry& iter, MDagPath& meshPath);
+    MStatus deformArticulated(MDataBlock& block, MItGeometry& iter, MDagPath& meshPath);
     MStatus getDagPaths(MDataBlock& block, MItGeometry iter, unsigned int multiIndex, MDagPath& meshPath, MDagPath& transformPath);
 
 private:

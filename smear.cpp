@@ -1,4 +1,4 @@
-#include "smear.h"
+﻿#include "smear.h"
 #include <maya/MFnDependencyNode.h>
 #include <maya/MFnAnimCurve.h>
 #include <maya/MPlug.h>
@@ -604,7 +604,7 @@ MStatus Smear::getSkinClusterAndBones(const MDagPath& inputPath,
 {
     MStatus status;
 
-    // Make sure we�re starting from the transform
+    // Make sure we’re starting from the transform
     MDagPath meshPath = inputPath;
     if (meshPath.apiType() == MFn::kMesh) {
         meshPath.pop();
@@ -739,6 +739,28 @@ bool Smear::loadCache(const MString& cachePath)
 
         std::cout << "[SMEARin] loadCache pushed "
             << vertexCache.size() << " frames\n";
+
+        if (vertexCache.size() > 10 && vertexCache[2].positions.size() == vertexCache[10].positions.size()) {
+            bool identical = true;
+            for (unsigned i = 0; i < vertexCache[2].positions.size(); ++i) {
+                const MPoint& p2 = vertexCache[2].positions[i];
+                const MPoint& p10 = vertexCache[10].positions[i];
+
+                if ((p2 - p10).length() > 1e-6) {
+                    identical = false;
+                    break;
+                }
+            }
+
+            if (identical)
+                MGlobal::displayInfo("✅ Frame 2 and Frame 10 positions are IDENTICAL.");
+            else
+                MGlobal::displayInfo("⚠️ Frame 2 and Frame 10 positions are DIFFERENT.");
+        }
+        else {
+            MGlobal::displayError("❌ Cannot compare frame 2 and 10: insufficient data or mismatched vertex counts.");
+        }
+
         return true;
     }
 

@@ -37,14 +37,13 @@ def run_preprocess():
 
 def full_bake_and_trigger():
     try:
-        path = run_preprocess()
+        path = run_preprocess() 
         if path:
             clean_path = path.replace('\\', '/')
 
             mel.eval(f'loadCache "{clean_path}"')
 
-            cmds.setAttr("smearControl1.triggerSmear", 1)
-            cmds.refresh()
-            cmds.setAttr("smearControl1.triggerSmear", 0)
+            cmds.setAttr("smearControl1.cacheLoaded", 1)
+            cmds.refresh() 
     except Exception as e:
         cmds.error(f"[SMEARin] Bake failed: {e}")

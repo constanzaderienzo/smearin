@@ -100,8 +100,7 @@ MStatus executeMELScript() {
 
             // Create the control node (SmearControlNode)
             string $controlNode = `createNode SmearControlNode -name "smearControl1"`;
-            addAttr -ln "triggerSmear" -at "bool" -dv 0 $controlNode;
-            connectAttr ($controlNode + ".triggerSmear") ($deformerNode + ".trigger");
+            connectAttr ($controlNode + ".cacheLoaded") ($deformerNode + ".cl");
 
             // Connect the message attribute from the control node to the deformer node.
             // (Assuming the control node defines a message attribute named "controlMessage"
@@ -154,6 +153,7 @@ MStatus executeMELScript() {
             connectAttr ($controlNode + ".motionLinesSmoothWindow")     ($motionLinesNode + ".smwin");
             connectAttr ($controlNode + ".motionLinesCount") ($motionLinesNode + ".mlcnt");
             connectAttr ($controlNode + ".generateMotionLines") ($motionLinesNode + ".gen");
+            connectAttr ($controlNode + ".cacheLoaded") ($motionLinesNode + ".cl");
 
             // Open the control panel window for editing node attributes
             smearControlGUI(); 
@@ -329,7 +329,7 @@ except Exception as e:
     // Adds plugin related GUI to the Maya toolbar
     executeMELScript();
 
-    Smear::loadCache("C:\\Users\\Admin\\Documents\\School\\cis-6600-advanced-topics-in-computer-graphics\\SMEARin\\smearin\\cache\\cache.json"); 
+    //Smear::loadCache("C:\\Users\\Admin\\Documents\\School\\cis-6600-advanced-topics-in-computer-graphics\\SMEARin\\smearin\\cache\\cache.json"); 
 
     return MStatus::kSuccess;
 }

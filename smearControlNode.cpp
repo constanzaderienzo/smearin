@@ -24,6 +24,7 @@ MObject SmearControlNode::aMotionLinesSmoothWindow;
 MObject SmearControlNode::aGenerateMotionLines;
 
 MObject SmearControlNode::aControlMsg;
+MObject SmearControlNode::trigger;
 
 SmearControlNode::SmearControlNode()
 {}
@@ -42,6 +43,9 @@ MStatus SmearControlNode::initialize() {
     MFnNumericAttribute nAttr;
     MFnMessageAttribute mAttr;
     MStatus status;
+
+    trigger = nAttr.create("trigger", "trg", MFnNumericData::kBoolean);
+    addAttribute(trigger);
 
     // Create elongationStrengthPast attribute.
     aElongationStrengthPast = nAttr.create("elongationStrengthPast", "sp", MFnNumericData::kDouble, 1.5, &status);
@@ -122,8 +126,6 @@ MStatus SmearControlNode::initialize() {
     nAttr.setStorable(true);
     nAttr.setKeyable(true);
     addAttribute(aGenerateMotionLines);
-
-
 
     // Create and add a message attribute.
     aControlMsg = mAttr.create("controlMessage", "ctrlMsg", &status);

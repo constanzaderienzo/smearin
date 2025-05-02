@@ -9,6 +9,7 @@ set(SOURCE_FILES
     PluginMain.cpp
     cylinder.cpp
     motionLinesNode.cpp
+    loadCacheCmd.cpp
     smear.cpp
     smearControlNode.cpp
     smearDeformerNode.cpp    

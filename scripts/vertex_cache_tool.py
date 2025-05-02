@@ -2,60 +2,49 @@ import json
 import os
 import maya.cmds as cmds
 import maya.api.OpenMaya as om
+import maya.mel as mel    
+from utils import cache_vertex_trajectories_with_deltas
 
-def cache_vertex_trajectories(mesh_name, output_path, compute_offsets=True):
-    """
-    Cache vertex trajectories over the playback range and optionally compute motion offsets.
-    """
-    start = int(cmds.playbackOptions(q=True, min=True))
-    end = int(cmds.playbackOptions(q=True, max=True))
-    frames = list(range(start, end + 1))
+import os
+import maya.cmds as cmds
+from utils import cache_vertex_trajectories_with_deltas
 
-    sel = om.MSelectionList()
-    sel.add(mesh_name)
-    dag_path = sel.getDagPath(0)
-    mesh_fn = om.MFnMesh(dag_path)
+def run_preprocess():
+    sel = cmds.ls(selection=True)
+    if not sel:
+        cmds.error("No object selected.")
+        return None
 
-    vertex_count = mesh_fn.numVertices
-    vertex_trajectories = {}
+    transform = sel[0]
+    shapes = cmds.listRelatives(transform, shapes=True, fullPath=True) or []
+    if not shapes:
+        cmds.error(f"{transform} has no mesh shape!")
+        return None
 
-    for frame in frames:
-        cmds.currentTime(frame, edit=True)
-        points = mesh_fn.getPoints(space=om.MSpace.kWorld)
-        vertex_trajectories[str(frame)] = [[p.x, p.y, p.z] for p in points]
+    meshShape = shapes[0]
 
-    data = {
-        "vertex_count": vertex_count,
-        "start_frame": start,
-        "frames": vertex_trajectories
-    }
+    # make a cache folder next to current working dir
+    cache_dir = os.path.join(os.getcwd(), "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    output_path = os.path.join(cache_dir, "cache.json")
 
-    # Optionally compute motion_offsets based on per-vertex velocity magnitude
-    if compute_offsets and len(frames) >= 2:
-        motion_offsets = {}
+    # now pass the shape name, not an MDagPath
+    cache_vertex_trajectories_with_deltas(meshShape, output_path)
 
-        for i, frame in enumerate(frames):
-            if i == 0 or i == len(frames) - 1:
-                # No motion on first or last frame
-                motion_offsets[str(frame)] = [0.0] * vertex_count
-                continue
+    print(f"[SMEARin] Preprocessing complete. Cache written to {output_path}")
+    return output_path
 
-            prev_frame = vertex_trajectories[str(frames[i - 1])]
-            next_frame = vertex_trajectories[str(frames[i + 1])]
 
-            offsets = []
-            for p0, p1 in zip(prev_frame, next_frame):
-                v = [b - a for a, b in zip(p0, p1)]
-                length = sum([x * x for x in v]) ** 0.5
-                # Normalize to [-1, 1] if desired
-                offsets.append(length)
+def full_bake_and_trigger():
+    try:
+        path = run_preprocess()
+        if path:
+            clean_path = path.replace('\\', '/')
 
-            motion_offsets[str(frame)] = offsets
+            mel.eval(f'loadCache "{clean_path}"')
 
-        data["motion_offsets"] = motion_offsets
-
-    # Save the result
-    with open(output_path, 'w') as f:
-        json.dump(data, f, separators=(',', ':'))
-
-    print(f"[SMEARin] Cached vertex trajectories to {output_path}")
+            cmds.setAttr("smearControl1.triggerSmear", 1)
+            cmds.refresh()
+            cmds.setAttr("smearControl1.triggerSmear", 0)
+    except Exception as e:
+        cmds.error(f"[SMEARin] Bake failed: {e}")

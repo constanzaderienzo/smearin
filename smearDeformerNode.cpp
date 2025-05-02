@@ -254,7 +254,7 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
        
     // Check if we should run deformation
     bool applyElongation = block.inputValue(aApplyElongation, &status).asBool();
-    bool triggerEnabled = block.inputValue(trigger, &status).asBool();
+    //bool triggerEnabled = block.inputValue(trigger, &status).asBool();
     if (!status || !applyElongation) {
         return MS::kSuccess;
     }

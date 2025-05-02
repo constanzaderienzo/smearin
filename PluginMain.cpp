@@ -14,6 +14,7 @@
 #include "smearDeformerNode.h"
 #include "smearControlNode.h"
 #include "motionLinesNode.h"
+#include "loadCacheCmd.h"
 
 /*
 ================================================================================
@@ -167,10 +168,10 @@ MStatus executeMELScript() {
         window -title "Smear Control Panel" smearControlWindow;
         columnLayout -adjustableColumn true;
 
-        button -label "APPLY SMEAR NOW" 
-            -command ("setAttr smearControl1.triggerSmear 1; "
-                    + "refresh; "
-                    + "setAttr smearControl1.triggerSmear 0;");
+        button 
+            -label "Bake Smear"
+            -command ("python(\"import vertex_cache_tool; vertex_cache_tool.full_bake_and_trigger()\");")
+            bakeSmearButton;
 
         // Create a frame layout (collapsible section) for the "Elongated in-between" category
         frameLayout -label "Elongated in-between" -collapsable true -collapse false;
@@ -308,6 +309,9 @@ MStatus initializePlugin(MObject obj) {
         return status;
     }
 
+    plugin.registerCommand("loadCache", LoadCacheCmd::creator);
+
+
     MGlobal::executePythonCommand(R"(
 import sys, os
 scripts_path = os.path.abspath(os.path.join(os.getcwd(), '../scripts'))
@@ -357,6 +361,9 @@ MStatus uninitializePlugin(MObject obj) {
         status.perror("deregisterNode MotionLinesNode");
         return status;
     }
+
+    plugin.deregisterCommand("loadCache");
+
 
     return MStatus::kSuccess;
 }

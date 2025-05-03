@@ -15,14 +15,13 @@
 #include <maya/MTimeArray.h>
 #include <maya/MFnSkinCluster.h>
 #include <maya/MFnSingleIndexedComponent.h>
-
+#include <maya/MAnimControl.h>
 
 #define McheckErr(stat, msg)        \
     if (MS::kSuccess != stat) {     \
         MGlobal::displayError(msg); \
         return MS::kFailure;        \
     }
-
 
 MTypeId SmearDeformerNode::id(0x98530); // Random id 
 MObject SmearDeformerNode::time;
@@ -31,6 +30,7 @@ MObject SmearDeformerNode::smoothEnabled;
 MObject SmearDeformerNode::aelongationStrengthPast;
 MObject SmearDeformerNode::aelongationStrengthFuture; 
 MObject SmearDeformerNode::aApplyElongation;
+MObject SmearDeformerNode::aCacheLoaded;
 
 // Message attribute for connecting to the control node.
 MObject SmearDeformerNode::inputControlMsg;
@@ -55,7 +55,11 @@ MStatus SmearDeformerNode::initialize()
     MFnMessageAttribute mAttr;  // For message attributes
     MStatus status;
 
-    // Time attribute
+    aCacheLoaded = numAttr.create("cacheLoaded", "cl", MFnNumericData::kBoolean, false, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    addAttribute(aCacheLoaded);
+
+    // Time attribute 
     time = unitAttr.create("time", "tm", MFnUnitAttribute::kTime, 0.0);
     addAttribute(time);
 
@@ -184,93 +188,105 @@ MStatus SmearDeformerNode::deformSimple(MDataBlock& block, MItGeometry& iter, MD
     }
     return MStatus::kSuccess;
 }
-MStatus SmearDeformerNode::deformArticulated(MItGeometry& iter, MDagPath& meshPath) {
+
+MStatus SmearDeformerNode::deformArticulated(MDataBlock& block, MItGeometry& iter,
+    MDagPath& meshPath)
+{
     MStatus status;
 
-    if (!skinDataBaked) {
-        MGlobal::displayInfo("Calculating skin data.");
-        // 1. Get skinCluster and influence bones
-        MObject skinClusterObj;
-        MDagPathArray influenceBones;
-        status = Smear::getSkinClusterAndBones(meshPath, skinClusterObj, influenceBones);
-        if (!status) return status;
+    MDataHandle timeDataHandle = block.inputValue(time, &status);
+    McheckErr(status, "Failed to obtain data handle for time input");
+    MTime currentTime = timeDataHandle.asTime();
 
-        MFnSkinCluster skinFn(skinClusterObj, &status);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
+    // Maya seems to always evaluate deformer node at 24 fps, 
+    // So if the viewport is set to 30 fps,
+    // and the viewport's current frame is 30 
+    // frameD will be 24. (frame 30 / 30 fps = 1 sec; 1 sec * 24 fps = frame 24)
+    const double deformerEvaluationFPS = 24.0; 
+    double frameD = currentTime.as(MTime::kFilm); 
+    double sampleFrameD = frameD * Smear::cacheFPS / deformerEvaluationFPS; 
+    int sampleFrame = static_cast<int>(sampleFrameD);
 
-        // 2. Create full vertex component
-        MFnSingleIndexedComponent compFn;
-        MObject vertexComp = compFn.create(MFn::kMeshVertComponent, &status);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
+    // assume Smear::vertexCache[f] corresponds to Maya frame f <- NOT TRUE ANYMORE SINCE WE ARE USING VECTOR INSTEAD OF MAP 
+    if (sampleFrame < 0 || sampleFrame >= (int)Smear::vertexCache.size())
+        return MS::kFailure;
 
-        uint numVertices = iter.count(&status);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
+    const FrameCache& fc = Smear::vertexCache[sampleFrame];
 
-        for (uint i = 0; i < numVertices; ++i) {
-            compFn.addElement(i);
-        }
+    // references to the cached data
+    const auto& basePos = fc.positions;      // vector<MPoint>
+    const auto& deltas = fc.motionOffsets;  // MDoubleArray
 
-        // 3. Get all weights for all influences on all vertices
-        uint numInfluences;
-        MDoubleArray weights;
+    // 2) artist parameters (read earlier in deform() and stored in members)
+    double sPast = elongationStrengthPast;
+    double sFut = elongationStrengthFuture;
 
-        MDagPath skinnedPath;
-        status = skinFn.getPathAtIndex(0, skinnedPath);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
+    // 3) for Catmull‑Rom we need positions at f−1,f,f+1,f+2
+    auto getPos = [&](int fIdx, int vid)->MPoint {
+        // clamp to valid range
+        fIdx = std::clamp(fIdx, 0, (int)Smear::vertexCache.size() - 1);
+        return Smear::vertexCache[fIdx].positions[vid];
+        };
 
-        status = skinFn.getWeights(skinnedPath, vertexComp, weights, numInfluences);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
+    //// 4) now for each vertex
+    for (; !iter.isDone(); iter.next()) {
+        int vid = iter.index();
+        double delta = deltas[vid];
 
-        // 4. Reshape into per-vertex storage
-        vertexWeights.clear();
-        vertexWeights.resize(numVertices);
+        // compute the “baked” displacement amount
+        double beta = delta *(delta < 0 ? sPast : sFut);
 
-        for (uint v = 0; v < numVertices; ++v) {
-            std::vector<InfluenceData> influences;
+        // determine which segment of the trajectory to sample
+         //β∈[−1,1] → if β≥0 we move toward next frame, else toward prev
+        int   baseFrame = sampleFrame + (int)std::floor(beta);
+        double u = beta - std::floor(beta);
 
-            for (uint j = 0; j < numInfluences; ++j) {
-                float w = static_cast<float>(weights[v * numInfluences + j]);
-                if (w > 0.001f) {  // ignore negligible weights
-                    influences.push_back({ j, w });
-                }
-            }
-            vertexWeights[v] = influences;
-        }
+        // control points for Catmull‑Rom: p0,p1,p2,p3
+        MPoint p0 = getPos(baseFrame - 1, vid);
+        MPoint p1 = getPos(baseFrame, vid);
+        MPoint p2 = getPos(baseFrame + 1, vid);
+        MPoint p3 = getPos(baseFrame + 2, vid);
 
-        skinDataBaked = true;
-        MGlobal::displayInfo("Skin weights initialized and cached.");
+        // evaluate spline
+        MPoint newP = catmullRomInterpolate(p0, p1, p2, p3, (float)u);
+
+        // set the vertex
+        iter.setPosition(newP);        
     }
-    return MStatus::kSuccess;
+
+    return MS::kSuccess;
 }
+
 
 MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
 {
     MStatus status; 
        
-    // Artistic control param
-    MDataHandle applyHandle = block.inputValue(aApplyElongation, &status);
-    McheckErr(status, "Failed to obtain data handle for applyElongation");
-    bool applyElongation = applyHandle.asBool();
-    if (!applyElongation) {
-        // Do nothing if elongation is disabled.
+    // Check if we should run deformation
+    bool applyElongation = block.inputValue(aApplyElongation, &status).asBool();
+    //bool triggerEnabled = block.inputValue(trigger, &status).asBool();
+    if (!status || !applyElongation) {
         return MS::kSuccess;
     }
 
-    elongationStrengthPast = block.inputValue(aelongationStrengthPast).asDouble();
-    elongationStrengthFuture = block.inputValue(aelongationStrengthFuture).asDouble();
-
-    smoothingEnabled = block.inputValue(smoothEnabled).asBool();
-    N = smoothingEnabled ? block.inputValue(elongationSmoothWindowSize).asInt() : 0;
-    // ################################
-
+    // 1. Get current mesh information
     MDagPath meshPath, transformPath;
     getDagPaths(block, iter, multiIndex, meshPath, transformPath);
+    MString meshName = meshPath.fullPathName();
 
-    if (0) {
-        deformSimple(block, iter, meshPath, transformPath);
+    // 3. Get deformation parameters
+    elongationStrengthPast = block.inputValue(aelongationStrengthPast).asDouble();
+    elongationStrengthFuture = block.inputValue(aelongationStrengthFuture).asDouble();
+    smoothingEnabled = block.inputValue(smoothEnabled).asBool();
+    N = smoothingEnabled ? block.inputValue(elongationSmoothWindowSize).asInt() : 0;
+
+
+    // 4. Perform deformation
+    if (Smear::isMeshArticulated(meshPath)) {
+        deformArticulated(block, iter, meshPath);
     }
     else {
-        deformArticulated(iter, meshPath);
+        deformSimple(block, iter, meshPath, transformPath);
     }
 
     return MS::kSuccess();
@@ -344,6 +360,48 @@ MStatus SmearDeformerNode::getDagPaths(MDataBlock& block, MItGeometry iter, unsi
     transformPath.pop(); // Removes the shape node, leaving the transform 
 
     return status;
+}
+
+// General deformation application using offsets + trajectories
+void SmearDeformerNode::applyDeformation(MItGeometry& iter, int frameIndex) {
+    const int numFrames = static_cast<int>(motionOffsets.vertexTrajectories.size());
+    const MDoubleArray& offsets = motionOffsets.motionOffsets[frameIndex];
+
+    std::vector<double> finalOffsets(offsets.length());
+    for (int i = 0; i < offsets.length(); ++i) {
+        double sum = 0.0, total = 0.0;
+        for (int j = -N; j <= N; ++j) {
+            int idx = frameIndex + j;
+            if (idx < 0 || idx >= motionOffsets.motionOffsets.size()) continue;
+            double w = std::pow(1.0 - std::pow(std::abs(j) / double(N + 1), 2.0), 2.0);
+            sum += motionOffsets.motionOffsets[idx][i] * w;
+            total += w;
+        }
+        finalOffsets[i] = (total > 0.0) ? sum / total : offsets[i];
+    }
+
+    for (; !iter.isDone(); iter.next()) {
+        int idx = iter.index();
+        double offset = finalOffsets[idx];
+        double t = (offset + 1.0) / 2.0;
+        double strength = (1.0 - t) * elongationStrengthPast + t * elongationStrengthFuture;
+        double beta = offset * strength;
+
+        int baseFrame = frameIndex + int(floor(beta));
+        double localT = beta - floor(beta);
+
+        int f0 = std::clamp(baseFrame - 1, 0, numFrames - 1);
+        int f1 = std::clamp(baseFrame, 0, numFrames - 1);
+        int f2 = std::clamp(baseFrame + 1, 0, numFrames - 1);
+        int f3 = std::clamp(baseFrame + 2, 0, numFrames - 1);
+
+        const MPoint& p0 = motionOffsets.vertexTrajectories[f0][idx];
+        const MPoint& p1 = motionOffsets.vertexTrajectories[f1][idx];
+        const MPoint& p2 = motionOffsets.vertexTrajectories[f2][idx];
+        const MPoint& p3 = motionOffsets.vertexTrajectories[f3][idx];
+
+        iter.setPosition(catmullRomInterpolate(p0, p1, p2, p3, localT));
+    }
 }
 
 MPoint SmearDeformerNode::catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t) {

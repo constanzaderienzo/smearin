@@ -14,6 +14,28 @@
 #include "smearDeformerNode.h"
 #include "smearControlNode.h"
 #include "motionLinesNode.h"
+#include "loadCacheCmd.h"
+
+/*
+================================================================================
+This plugin uses Python scripts that require NumPy. To ensure Maya can import
+NumPy inside its embedded Python (mayapy), follow these steps:
+
+1. Open an **elevated command prompt** (Run as Administrator):
+   - Press Start
+   - Search for "CMD"
+   - Right-click and select "Run as administrator"
+
+2. Navigate to Maya's Python directory:
+   For example, for Maya 2023:
+       cd "C:\Program Files\Autodesk\Maya2023\bin"
+
+3. Install NumPy using mayapy:
+       mayapy -m pip install numpy
+
+This will install NumPy into Maya's embedded Python environment.
+================================================================================
+*/
 
 class PluginMain : public MPxCommand {
 private: 
@@ -78,6 +100,7 @@ MStatus executeMELScript() {
 
             // Create the control node (SmearControlNode)
             string $controlNode = `createNode SmearControlNode -name "smearControl1"`;
+            connectAttr ($controlNode + ".cacheLoaded") ($deformerNode + ".cl");
 
             // Connect the message attribute from the control node to the deformer node.
             // (Assuming the control node defines a message attribute named "controlMessage"
@@ -130,6 +153,7 @@ MStatus executeMELScript() {
             connectAttr ($controlNode + ".motionLinesSmoothWindow")     ($motionLinesNode + ".smwin");
             connectAttr ($controlNode + ".motionLinesCount") ($motionLinesNode + ".mlcnt");
             connectAttr ($controlNode + ".generateMotionLines") ($motionLinesNode + ".gen");
+            connectAttr ($controlNode + ".cacheLoaded") ($motionLinesNode + ".cl");
 
             // Open the control panel window for editing node attributes
             smearControlGUI(); 
@@ -143,7 +167,12 @@ MStatus executeMELScript() {
         // Create the main window for the control panel
         window -title "Smear Control Panel" smearControlWindow;
         columnLayout -adjustableColumn true;
-    
+
+        button 
+            -label "Bake Smear"
+            -command ("python(\"import vertex_cache_tool; vertex_cache_tool.full_bake_and_trigger()\");")
+            bakeSmearButton;
+
         // Create a frame layout (collapsible section) for the "Elongated in-between" category
         frameLayout -label "Elongated in-between" -collapsable true -collapse false;
             columnLayout -adjustableColumn true;
@@ -152,11 +181,11 @@ MStatus executeMELScript() {
                 connectControl "applyElongationCheckbox" "smearControl1.applyElongation";
 
                 // Create a slider for Past Strength (attribute smearControl1.sp)
-                floatSliderGrp -label "Past Strength:" -field true -min 0 -max 5 pastStrengthSlider;
+                floatSliderGrp -label "Past Strength:" -field true -min 0 -max 150 pastStrengthSlider;
                 connectControl "pastStrengthSlider" "smearControl1.sp";
 
                 // Create a slider for Future Strength (attribute smearControl1.sf)
-                floatSliderGrp -label "Future Strength:" -field true -min 0 -max 5 futureStrengthSlider;
+                floatSliderGrp -label "Future Strength:" -field true -min 0 -max 150 futureStrengthSlider;
                 connectControl "futureStrengthSlider" "smearControl1.sf";
 
                 // Create a slider for Smooth Window (attribute smearControl1.sw)
@@ -180,12 +209,12 @@ MStatus executeMELScript() {
                 
                 // Create a slider for Motion Lines Past Strength 
                 // (assumed attribute name: smearControl1.motionLinesStrengthPast)
-                floatSliderGrp -label "Motion Lines Past Strength:" -field true -min 0 -max 5 motionLinesPastStrengthSlider;
+                floatSliderGrp -label "Motion Lines Past Strength:" -field true -min 0 -max 150 motionLinesPastStrengthSlider;
                 connectControl "motionLinesPastStrengthSlider" "smearControl1.motionLinesStrengthPast";
 
                 // Create a slider for Motion Lines Future Strength
                 // (assumed attribute name: smearControl1.motionLinesStrengthFuture)
-                floatSliderGrp -label "Motion Lines Future Strength:" -field true -min 0 -max 5 motionLinesFutureStrengthSlider;
+                floatSliderGrp -label "Motion Lines Future Strength:" -field true -min 0 -max 150 motionLinesFutureStrengthSlider;
                 connectControl "motionLinesFutureStrengthSlider" "smearControl1.motionLinesStrengthFuture";
 
                 // Create a slider for Motion Lines Smooth Window
@@ -280,8 +309,27 @@ MStatus initializePlugin(MObject obj) {
         return status;
     }
 
+    plugin.registerCommand("loadCache", LoadCacheCmd::creator);
+
+
+    MGlobal::executePythonCommand(R"(
+import sys, os
+scripts_path = os.path.abspath(os.path.join(os.getcwd(), '../scripts'))
+if scripts_path not in sys.path:
+    sys.path.insert(0, scripts_path)
+
+try:
+    import vertex_cache_tool  # preload into sys.modules
+    print('[SMEARin] Preloaded vertex_cache_tool')
+except Exception as e:
+    import traceback
+    traceback.print_exc()
+)");
+
     // Adds plugin related GUI to the Maya toolbar
     executeMELScript();
+
+    //Smear::loadCache("C:\\Users\\Admin\\Documents\\School\\cis-6600-advanced-topics-in-computer-graphics\\SMEARin\\smearin\\cache\\cache.json"); 
 
     return MStatus::kSuccess;
 }
@@ -313,6 +361,9 @@ MStatus uninitializePlugin(MObject obj) {
         status.perror("deregisterNode MotionLinesNode");
         return status;
     }
+
+    plugin.deregisterCommand("loadCache");
+
 
     return MStatus::kSuccess;
 }

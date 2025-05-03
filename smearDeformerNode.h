@@ -8,6 +8,7 @@
 #include <vector>
 #include "smear.h"
 
+
 /*
 deformer -type "SmearDeformerNode" pCylinder1;
 connectAttr "time1.outTime" "SmearDeformerNode1.time";
@@ -31,6 +32,8 @@ public:
     static MObject aelongationStrengthPast;
     static MObject aelongationStrengthFuture; 
     static MObject aApplyElongation; 
+    static MObject aCacheLoaded;
+
 
     // Message attribute for connecting the control node.
     static MObject inputControlMsg;
@@ -47,8 +50,9 @@ public:
         MItGeometry& iter,
         const MMatrix& localToWorldMatrix,
         unsigned int multiIndex) override;
+    void applyDeformation(MItGeometry& iter, int frameIndex);
     MStatus deformSimple(MDataBlock& block, MItGeometry& iter, MDagPath& meshPath, MDagPath& transformPath);
-    MStatus deformArticulated(MItGeometry& iter, MDagPath& meshPath);
+    MStatus deformArticulated(MDataBlock& block, MItGeometry& iter, MDagPath& meshPath);
     MStatus getDagPaths(MDataBlock& block, MItGeometry iter, unsigned int multiIndex, MDagPath& meshPath, MDagPath& transformPath);
 
 private:

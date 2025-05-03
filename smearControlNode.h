@@ -35,4 +35,6 @@ public:
 
     // Message attribute to connect to the deformer node.
     static MObject aControlMsg;
+    // For pre-process
+    static MObject aCacheLoaded;
 };

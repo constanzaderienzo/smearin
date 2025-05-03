@@ -39,6 +39,7 @@ MObject MotionLinesNode::aStrengthFuture;
 MObject MotionLinesNode::aGenerateMotionLines;
 MObject MotionLinesNode::aMotionLinesCount; 
 MObject MotionLinesNode::inputControlMsg;  // Message attribute for connecting to the control node
+MObject MotionLinesNode::aCacheLoaded;
 
 MStatus MotionLinesNode::selectSeeds(int count)
 {
@@ -106,6 +107,10 @@ MStatus MotionLinesNode::initialize() {
     MFnTypedAttribute   tAttr;
     MFnNumericAttribute nAttr;
     MFnMessageAttribute mAttr;
+
+    aCacheLoaded = nAttr.create("cacheLoaded", "cl", MFnNumericData::kBoolean, false, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    addAttribute(aCacheLoaded);
 
     // Time attribute
     time = uAttr.create("time", "tm", MFnUnitAttribute::kTime, 0.0, &status);
@@ -179,6 +184,7 @@ MStatus MotionLinesNode::initialize() {
     attributeAffects(aStrengthFuture, aOutputMesh);
     attributeAffects(aGenerateMotionLines, aOutputMesh);
     attributeAffects(inputControlMsg, aOutputMesh);
+    attributeAffects(aCacheLoaded, aOutputMesh);
 
     return MS::kSuccess;
 }
@@ -345,11 +351,14 @@ MObject MotionLinesNode::createReverseTris(const MFloatPointArray& points, MObje
 
 MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
     MStatus status;
-
+    return MS::kSuccess; 
+    /*
     MDataHandle genHandle = data.inputValue(aGenerateMotionLines, &status);
     McheckErr(status, "Failed to obtain data handle for applyElongation");
     bool genMotionLines = genHandle.asBool();
-    if (!genMotionLines) {
+    MDataHandle cacheLoadedHandle = data.inputValue(aCacheLoaded, &status);
+    bool cacheLoaded = cacheLoadedHandle.asBool();
+    if (!genMotionLines || !cacheLoaded) {
         MFnMeshData meshData;
         MObject newOutput = meshData.create(&status);
         MDataHandle outputHandle = data.outputValue(aOutputMesh, &status);
@@ -508,6 +517,7 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
     data.setClean(plug);
 
     return MS::kSuccess;
+    */
 }
 
 //MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {

@@ -9,6 +9,12 @@
 #include <maya/MPointArray.h>
 #include <maya/MDoubleArray.h>
 #include <maya/MDagPath.h>
+#include <vector>
+#include <unordered_map> 
+#include <fstream>  
+#include "json.hpp"
+
+using json = nlohmann::json;
 
 using std::cout;
 using std::endl;
@@ -19,6 +25,13 @@ struct MotionOffsetsSimple {
     std::vector<MDoubleArray> motionOffsets;  // 2D: motionOffsets[frame][vertex]
     std::vector<MPointArray> vertexTrajectories; // Store per-vertex trajectory
 };
+
+struct FrameCache {
+    std::vector<MPoint> positions;     // Vertex world positions
+    MDoubleArray motionOffsets;        // Optional: scalar offset per vertex
+    bool loaded = false;
+};
+
 struct BoneData {
     MPoint rootPos;
     MPoint tipPos;
@@ -45,8 +58,14 @@ public:
     static MStatus extractAnimationFrameRange(const MDagPath& transformPath, double& startFrame, double& endFrame);
     static MStatus getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug& inputMeshPlug, MDagPath& transformPath, MDagPath& shapePath);
 
-    static MStatus getSkeletonInformation();
+    static bool isMeshArticulated(const MDagPath& meshPath);
     static MStatus getSkinClusterAndBones(const MDagPath& meshPath, MObject& skinClusterObj, MDagPathArray& influenceBones);
-    static MTimeArray getAnimationRange();
 
+    static std::unordered_map<int, FrameCache> vertexCache;
+    static double cacheFPS; 
+    static int vertexCount;
+    static MString lastCachePath;
+
+    static bool loadCache(const MString& cachePath);
+    static void clearVertexCache();
 };

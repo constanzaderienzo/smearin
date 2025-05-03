@@ -281,6 +281,18 @@ def build_deltas(verts, joints, weights_arr, joints_list, window=2):
 
     return {frame: smoothed[i] for i, frame in enumerate(frames)}
 
+def get_scene_fps():
+    unit = cmds.currentUnit(query=True, time=True)
+    unit_to_fps = {
+        'game': 15.0, 'film': 24.0, 'pal': 25.0, 'ntsc': 30.0,
+        'show': 48.0, 'palf': 50.0, 'ntscf': 60.0,
+        '2fps': 2.0, '3fps': 3.0, '4fps': 4.0, '5fps': 5.0,
+        '6fps': 6.0, '8fps': 8.0, '10fps': 10.0, '12fps': 12.0,
+        '16fps': 16.0, '20fps': 20.0, '40fps': 40.0, '75fps': 75.0,
+        '80fps': 80.0, '100fps': 100.0, '120fps': 120.0,
+    }
+    return unit_to_fps.get(unit, 24.0)
+
 def cache_vertex_trajectories_with_deltas(mesh_name, output_path):
     # Frame range
     start = int(cmds.playbackOptions(q=True, min=True))
@@ -319,7 +331,8 @@ def cache_vertex_trajectories_with_deltas(mesh_name, output_path):
         "start_frame": start,
         "end_frame": end,
         "vertex_trajectories": vertex_trajectories,
-        "motion_offsets": motion_offsets
+        "motion_offsets": motion_offsets,
+        "baked_frame_rate": get_scene_fps() 
     }
 
     # Save to JSON

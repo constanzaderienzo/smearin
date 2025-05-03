@@ -63,6 +63,7 @@ public:
     static MTimeArray getAnimationRange();
 
     static std::unordered_map<int, FrameCache> vertexCache;
+    static double cacheFPS; 
     static int vertexCount;
     static MString lastCachePath;
 

@@ -23,7 +23,6 @@
         return MS::kFailure;        \
     }
 
-
 MTypeId SmearDeformerNode::id(0x98530); // Random id 
 MObject SmearDeformerNode::time;
 MObject SmearDeformerNode::elongationSmoothWindowSize;
@@ -198,14 +197,21 @@ MStatus SmearDeformerNode::deformArticulated(MDataBlock& block, MItGeometry& ite
     MDataHandle timeDataHandle = block.inputValue(time, &status);
     McheckErr(status, "Failed to obtain data handle for time input");
     MTime currentTime = timeDataHandle.asTime();
+
+    // Maya seems to always evaluate deformer node at 24 fps, 
+    // So if the viewport is set to 30 fps,
+    // and the viewport's current frame is 30 
+    // frameD will be 24. (frame 30 / 30 fps = 1 sec; 1 sec * 24 fps = frame 24)
+    const double deformerEvaluationFPS = 24.0; 
     double frameD = currentTime.as(MTime::kFilm); 
-    int frame = static_cast<int>(frameD);
+    double sampleFrameD = frameD * Smear::cacheFPS / deformerEvaluationFPS; 
+    int sampleFrame = static_cast<int>(sampleFrameD);
 
     // assume Smear::vertexCache[f] corresponds to Maya frame f <- NOT TRUE ANYMORE SINCE WE ARE USING VECTOR INSTEAD OF MAP 
-    if (frame < 0 || frame >= (int)Smear::vertexCache.size())
+    if (sampleFrame < 0 || sampleFrame >= (int)Smear::vertexCache.size())
         return MS::kFailure;
 
-    const FrameCache& fc = Smear::vertexCache[frame];
+    const FrameCache& fc = Smear::vertexCache[sampleFrame];
 
     // references to the cached data
     const auto& basePos = fc.positions;      // vector<MPoint>
@@ -232,7 +238,7 @@ MStatus SmearDeformerNode::deformArticulated(MDataBlock& block, MItGeometry& ite
 
         // determine which segment of the trajectory to sample
          //β∈[−1,1] → if β≥0 we move toward next frame, else toward prev
-        int   baseFrame = frame + (int)std::floor(beta);
+        int   baseFrame = sampleFrame + (int)std::floor(beta);
         double u = beta - std::floor(beta);
 
         // control points for Catmull‑Rom: p0,p1,p2,p3

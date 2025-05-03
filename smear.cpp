@@ -31,6 +31,7 @@ namespace fs = std::filesystem;
 std::unordered_map<int, FrameCache> Smear::vertexCache;
 int   Smear::vertexCount = 0;
 MString Smear::lastCachePath = "";
+double Smear::cacheFPS = 24.0;
 
 MTimeArray Smear::getAnimationRange() {
     MTimeArray timeArray;
@@ -709,6 +710,7 @@ bool Smear::loadCache(const MString& cachePath)
 
         //----------------------- basic info ---------------------------
         vertexCount = data["vertex_count"];
+        cacheFPS = data.value("baked_frame_rate", 24.0);
         int startFrame = data.value("start_frame", 0);
         int endFrame = data.value("end_frame", startFrame);
 

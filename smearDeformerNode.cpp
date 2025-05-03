@@ -251,13 +251,12 @@ MStatus SmearDeformerNode::deformArticulated(MDataBlock& block, MItGeometry& ite
         MPoint newP = catmullRomInterpolate(p0, p1, p2, p3, (float)u);
 
         // set the vertex
-        iter.setPosition(newP);
-        
-        //iter.setPosition(getPos(frame, vid));
+        iter.setPosition(newP);        
     }
 
     return MS::kSuccess;
 }
+
 
 MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MMatrix& localToWorldMatrix, unsigned int multiIndex)
 {
@@ -281,12 +280,13 @@ MStatus SmearDeformerNode::deform(MDataBlock& block, MItGeometry& iter, const MM
     smoothingEnabled = block.inputValue(smoothEnabled).asBool();
     N = smoothingEnabled ? block.inputValue(elongationSmoothWindowSize).asInt() : 0;
 
+
     // 4. Perform deformation
-    if (0) {
-        deformSimple(block, iter, meshPath, transformPath);
+    if (Smear::isMeshArticulated(meshPath)) {
+        deformArticulated(block, iter, meshPath);
     }
     else {
-        deformArticulated(block, iter, meshPath);
+        deformSimple(block, iter, meshPath, transformPath);
     }
 
     return MS::kSuccess();

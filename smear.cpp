@@ -33,39 +33,6 @@ int   Smear::vertexCount = 0;
 MString Smear::lastCachePath = "";
 double Smear::cacheFPS = 24.0;
 
-MTimeArray Smear::getAnimationRange() {
-    MTimeArray timeArray;
-    MStatus status;
-
-    //MGlobal::displayInfo("===== Extracting Animation Range =====");
-
-    // Get start/end from Maya's timeline
-    MTime startTime = MAnimControl::minTime();
-    MTime endTime = MAnimControl::maxTime();
-
-    //MGlobal::displayInfo(MString("Timeline Range: ") +
-        //startTime.value() + " to " + endTime.value() +
-        //" (in " + startTime.unit() + ")");
-
-    // Convert to frame numbers
-    double startFrame = startTime.as(MTime::kFilm);
-    double endFrame = endTime.as(MTime::kFilm);
-
-    // Validate range
-    if (endFrame <= startFrame) {
-        MGlobal::displayError("Invalid animation range (end <= start)");
-        return timeArray;
-    }
-
-    // Populate time array
-    for (double frame = startFrame; frame <= endFrame; frame += 1.0) {
-        timeArray.append(MTime(frame, MTime::kFilm));
-    }
-
-    //MGlobal::displayInfo(MString("Generated ") + (int)timeArray.length() + " frames");
-    return timeArray;
-}
-
 MStatus Smear::extractAnimationFrameRange(const MDagPath & transformPath, double& startFrame, double& endFrame) {
     MStatus status;
 
@@ -119,8 +86,6 @@ MStatus Smear::extractAnimationFrameRange(const MDagPath & transformPath, double
         return MS::kFailure;
     }
 
-    //MGlobal::displayInfo("extractAnimationFrameRange::startFrame: " + MString() + startFrame + " endFrame: " + endFrame);
-
     return MS::kSuccess;
 }
 
@@ -160,56 +125,6 @@ MStatus Smear::getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug& i
         return MS::kFailure;
     }
     return MS::kSuccess;
-}
-
-bool compareTransformComponents(MTransformationMatrix::RotationOrder rotOrder, const MMatrix& matrix,
-    const MVector& expectedTranslation,
-    const double expectedRotation[3],  // in radians
-    const double expectedScale[3],
-    double tolerance = 1e-4,
-    bool verbose = true)
-{
-    MTransformationMatrix xform(matrix);
-
-    // Decompose
-    MVector actualTranslation = xform.getTranslation(MSpace::kTransform);
-
-    double actualRotation[3];
-    xform.getRotation(actualRotation, rotOrder);
-
-    double actualScale[3];
-    xform.getScale(actualScale, MSpace::kTransform);
-
-    // Floating-point comparison helper
-    auto closeEnough = [=](double a, double b) {
-        return std::abs(a - b) <= tolerance;
-        };
-
-    // Compare each component
-    bool translationMatch =
-        closeEnough(expectedTranslation.x, actualTranslation.x) &&
-        closeEnough(expectedTranslation.y, actualTranslation.y) &&
-        closeEnough(expectedTranslation.z, actualTranslation.z);
-
-    bool rotationMatch =
-        closeEnough(expectedRotation[0], actualRotation[0]) &&
-        closeEnough(expectedRotation[1], actualRotation[1]) &&
-        closeEnough(expectedRotation[2], actualRotation[2]);
-
-    bool scaleMatch =
-        closeEnough(expectedScale[0], actualScale[0]) &&
-        closeEnough(expectedScale[1], actualScale[1]) &&
-        closeEnough(expectedScale[2], actualScale[2]);
-
-    if (verbose) {
-        MString msg = "Transform Comparison Result:\n";
-        msg += "  Translation match: " + MString(translationMatch ? "PASS" : "FAIL") + "\n";
-        msg += "  Rotation match   : " + MString(rotationMatch ? "PASS" : "FAIL") + "\n";
-        msg += "  Scale match      : " + MString(scaleMatch ? "PASS" : "FAIL");
-        //MGlobal::displayInfo(msg);
-    }
-
-    return translationMatch && rotationMatch && scaleMatch;
 }
 
 MStatus Smear::computeWorldTransformPerFrame(const MDagPath& transformPath,
@@ -550,55 +465,6 @@ MStatus Smear::getTransformFromMesh(const MDagPath& meshPath, MDagPath& transfor
     return MS::kSuccess;
 }
 
-MStatus Smear::getSkeletonInformation()
-{
-    MStatus status;
-
-    // Iterate through all joints in the scene
-    MItDependencyNodes jointIter(MFn::kJoint, &status);
-    for (; !jointIter.isDone(); jointIter.next())
-    {
-        MObject jointObj = jointIter.item();
-        MFnIkJoint jointFn(jointObj, &status);
-        McheckErr(status, "Failed to obtain joints");
-        
-        // Get joint name
-        MString jointName = jointFn.name();
-
-        MFnTransform transformFn(jointObj, &status);
-        McheckErr(status, "Failed to obtain the transform");
-            
-        // Get translation
-        MVector jointPos = jointFn.getTranslation(MSpace::kTransform);
-
-        // Get rotation (in radians)
-        MTransformationMatrix::RotationOrder rotOrder = transformFn.rotationOrder();
-        double rotation[3];
-        transformFn.getRotation(rotation, rotOrder);
-
-        // Get scale
-        double scale[3];
-        jointFn.getScale(scale);
-
-        // Get parent joint
-        MObject parentObj = jointFn.parent(0, &status);
-        MString parentName = "None";
-        if (status == MS::kSuccess && parentObj.hasFn(MFn::kJoint))
-        {
-            MFnIkJoint parentFn(parentObj);
-            parentName = parentFn.name();
-        }
-
-        const double conversion = (180.0 / 3.141592653589793238463);
-        //MGlobal::displayInfo(MString("Joint: ") + jointName +
-            //" | Parent: " + parentName +
-            //" | Rotation: (" + rotation[0] * conversion + ", " + rotation[1] * conversion + ", " + rotation[2] * conversion + ")" +
-            //" | Scale: (" + scale[0] + ", " + scale[1] + ", " + scale[2] + ")" +
-            //" | Position: (" + jointPos.x + ", " + jointPos.y + ", " + jointPos.z + ")");
-        
-    }
-}
-
 MStatus Smear::getSkinClusterAndBones(const MDagPath& inputPath,
     MObject& skinClusterObj,
     MDagPathArray& influenceBones)
@@ -668,6 +534,27 @@ MStatus Smear::getSkinClusterAndBones(const MDagPath& inputPath,
 
     MGlobal::displayError("No matching skinCluster found for mesh: " + meshPath.fullPathName());
     return MS::kFailure;
+}
+
+bool Smear::isMeshArticulated(const MDagPath& meshPath)
+{
+    MStatus status;
+
+    // 1. Check if it has a skinCluster
+    MObject skinClusterObj;
+    MDagPathArray influences;
+    status = getSkinClusterAndBones(meshPath, skinClusterObj, influences);
+
+    if (status != MS::kSuccess || skinClusterObj.isNull()) {
+        return false; // No skinCluster found
+    }
+
+    // 2. Verify it has at least 2 influencing joints
+    if (influences.length() < 2) {
+        return false; // Need at least 2 joints for articulation
+    }
+
+    return true;
 }
 
 MString createCachePath(const MString& meshName) {

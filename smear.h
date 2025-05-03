@@ -58,9 +58,8 @@ public:
     static MStatus extractAnimationFrameRange(const MDagPath& transformPath, double& startFrame, double& endFrame);
     static MStatus getDagPathsFromInputMesh(MObject inputMeshDataObj, const MPlug& inputMeshPlug, MDagPath& transformPath, MDagPath& shapePath);
 
-    static MStatus getSkeletonInformation();
+    static bool isMeshArticulated(const MDagPath& meshPath);
     static MStatus getSkinClusterAndBones(const MDagPath& meshPath, MObject& skinClusterObj, MDagPathArray& influenceBones);
-    static MTimeArray getAnimationRange();
 
     static std::unordered_map<int, FrameCache> vertexCache;
     static double cacheFPS; 

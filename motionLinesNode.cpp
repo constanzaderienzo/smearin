@@ -376,9 +376,6 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kSuccess;
     }
 
-    MDataHandle cacheLoadedHandle = data.inputValue(aCacheLoaded, &status);
-    bool cacheLoaded = cacheLoadedHandle.asBool();
-
     // Get shape and mesh path and determine if the mesh is articulated or not 
     MDataHandle inputHandle = data.inputValue(aInputMesh, &status);
     McheckErr(status, "Failed to get input mesh");
@@ -403,7 +400,136 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
     double frame = currentTime.as(MTime::kFilm);  // Get time in frames
 
     if (Smear::isMeshArticulated(shapePath)) {
-        return MS::kSuccess; 
+        MDataHandle cacheLoadedHandle = data.inputValue(aCacheLoaded, &status);
+        bool cacheLoaded = cacheLoadedHandle.asBool();
+
+        // Motion offsets must be cached before generating motion lines
+        if (!cacheLoaded) {
+            return MS::kSuccess; 
+        }
+
+        // Maya seems to always evaluate deformer node at 24 fps, 
+        // So if the viewport is set to 30 fps,
+        // and the viewport's current frame is 30 
+        // frameD will be 24. (frame 30 / 30 fps = 1 sec; 1 sec * 24 fps = frame 24)
+        const double deformerEvaluationFPS = 24.0;
+        double sampleFrameD = frame * Smear::cacheFPS / deformerEvaluationFPS;
+        int sampleFrame = static_cast<int>(sampleFrameD);
+
+        // assume Smear::vertexCache[f] corresponds to Maya frame f <- NOT TRUE ANYMORE SINCE WE ARE USING VECTOR INSTEAD OF MAP 
+        if (Smear::vertexCache.find(sampleFrame) == Smear::vertexCache.end())
+            return MS::kFailure;
+
+        const FrameCache& fc = Smear::vertexCache[sampleFrame];
+        const MDoubleArray& offsets = fc.motionOffsets; 
+        const int numFrames = Smear::vertexCache.size(); 
+
+        // Compute smoothed offsets, etc.
+        const bool smoothingEnabled = data.inputValue(smoothEnabled).asBool();
+        const int N = smoothingEnabled ? data.inputValue(smoothWindowSize).asInt() : 0;
+        std::vector<double> smoothedOffsets(offsets.length(), 0.0);
+        for (int vertIdx = 0; vertIdx < offsets.length(); ++vertIdx) {
+            double totalWeight = 0.0;
+            double smoothed = 0.0;
+            for (int n = -N; n <= N; ++n) {
+                const int frame = sampleFrame + n;
+                if (Smear::vertexCache.find(frame) == Smear::vertexCache.end()) {
+                    continue;
+                }
+                const double normalized = std::abs(n) / static_cast<double>(N + 1);
+                const double weight = std::pow(1.0 - std::pow(normalized, 2.0), 2.0);
+
+                if (Smear::vertexCache.find(sampleFrame) == Smear::vertexCache.end())
+                    continue; 
+
+                smoothed += Smear::vertexCache[frame].motionOffsets[vertIdx] * weight;
+                totalWeight += weight;
+            }
+            smoothedOffsets[vertIdx] = totalWeight > 0.0 ? smoothed / totalWeight : offsets[vertIdx];
+        }
+
+        MPointArray mlPoints;
+        MIntArray mlFaceCounts;
+        MIntArray mlFaceConnects;
+
+        // Artistic control param
+        const double strengthPast = data.inputValue(aStrengthPast).asDouble();
+        const double strengthFuture = data.inputValue(aStrengthFuture).asDouble();
+        const int segmentCount = 3;
+        const double cylinderRadius = 0.05;
+
+        int motionLinesCount = data.inputValue(aMotionLinesCount).asInt();
+        if (cachedMotionLinesCount != motionLinesCount) {
+            selectSeeds(motionLinesCount);
+            cachedMotionLinesCount = motionLinesCount;
+        }
+
+        for (unsigned int s = 0; s < seedIndices.length(); s++) {
+            int vertexIndex = seedIndices[s];
+
+            // Get the smoothed offset for this vertex.
+            double offset = smoothedOffsets[vertexIndex];
+
+            // Determine sampling direction:
+            // +1 for positive (leading) offsets, -1 for negative (trailing) offsets.
+            int direction = (offset >= 0.0) ? 1 : -1;
+
+            // Determine the appropriate motion line strength factor.
+            // These are assumed to be parameters from your node.
+            double strengthFactor = (offset >= 0.0) ? strengthFuture : strengthPast;
+
+            // Build a polyline along the vertex's trajectory.
+            // Instead of sampling consecutive frames, multiply the segment index by the strength factor.
+            MPointArray polyLine;
+            for (int seg = 0; seg <= segmentCount; seg++) {
+                // Calculate a frame increment scaled by the strength factor.
+                int frameIncrement = static_cast<int>(round(seg * strengthFactor));
+                int lineSampleFrame = sampleFrame + frameIncrement * direction;
+                if (Smear::vertexCache.find(lineSampleFrame) == Smear::vertexCache.end())
+                    break; 
+                polyLine.append(Smear::vertexCache[lineSampleFrame].positions[vertexIndex]);
+            }
+
+            // Create cylinder segments between consecutive polyline points.
+            for (unsigned int j = 0; j + 1 < polyLine.length(); j++) {
+                status = appendCylinder(polyLine[j], polyLine[j + 1],
+                    mlPoints, mlFaceCounts, mlFaceConnects);
+                if (status != MS::kSuccess) {
+                    MGlobal::displayError("Failed to append cylinder for motion line segment.");
+                    return status;
+                }
+            }
+        }
+
+        // Create new mesh data container
+        MFnMeshData meshData;
+        MObject newOutput = meshData.create(&status);
+
+        // Copy mesh using API method
+        MFnMesh inputFn(inputObj);
+        MObject copiedMesh = inputFn.copy(inputObj, newOutput, &status);
+        McheckErr(status, "Mesh copy failed");
+
+        // Cast copied Mesh into MFnMesh
+        MFnMesh outputFn(copiedMesh, &status);
+        McheckErr(status, "Output mesh init failed");
+
+
+        //MGlobal::displayInfo(MString() + "mlPoints.length(): " + mlPoints.length() + "mlFaceCounts.length(): " + mlFaceCounts.length());
+        MFnMesh meshFn;
+        MObject motionLinesMesh = meshFn.create(mlPoints.length(), mlFaceCounts.length(),
+            mlPoints, mlFaceCounts, mlFaceConnects, newOutput, &status);
+        if (status != MS::kSuccess) {
+            MGlobal::displayError("Motion lines mesh creation failed.");
+            return status;
+        }
+
+        MDataHandle outputHandle = data.outputValue(aOutputMesh, &status);
+        CHECK_MSTATUS_AND_RETURN_IT(status);
+        outputHandle.set(newOutput);
+        data.setClean(plug);
+
+        return MS::kSuccess;
     }
     else {
         return computeSimple(status, inputObj, data, shapePath, transformPath, frame, plug);
@@ -452,7 +578,6 @@ const MStatus& MotionLinesNode::computeSimple(MStatus& status, MObject& inputObj
         return MS::kSuccess;
     }
 
-    // --- Commented out actual motion lines generation ---
     const MDoubleArray& offsets = motionOffsetsSimple.motionOffsets[frameIndex];
     const std::vector<MPointArray>& trajectories = motionOffsetsSimple.vertexTrajectories;
     const int numFrames = trajectories.size();

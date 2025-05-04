@@ -90,7 +90,7 @@ MStatus MotionLinesNode::selectSeeds(int count)
 // Constructors and Creator Function
 //-----------------------------------------------------------------
 MotionLinesNode::MotionLinesNode():
-    motionOffsets(), motionOffsetsBaked(false), cachedMotionLinesCount(0) 
+    motionOffsetsSimple(), motionOffsetsBaked(false), cachedMotionLinesCount(0) 
 {}
 MotionLinesNode::~MotionLinesNode() {}
 
@@ -192,6 +192,20 @@ MStatus MotionLinesNode::initialize() {
 //-----------------------------------------------------------------
 // Cylinder Mesh Creation Related Helper Functions
 //-----------------------------------------------------------------
+
+MStatus MotionLinesNode::setMotionLinesNone(const MPlug& plug, MDataBlock& data)
+{
+    // Create an empty mesh and sets it to the output mesh 
+    // so that existing motion lines dissapear 
+    MStatus status; 
+    MFnMeshData meshData;
+    MObject newOutput = meshData.create(&status);
+    MDataHandle outputHandle = data.outputValue(aOutputMesh, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    outputHandle.set(newOutput);
+    data.setClean(plug);
+    return status; 
+}
 
 MObject MotionLinesNode::createMesh(const MTime& time,
     float angle,
@@ -351,29 +365,21 @@ MObject MotionLinesNode::createReverseTris(const MFloatPointArray& points, MObje
 
 MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
     MStatus status;
-    return MS::kSuccess; 
-    /*
+
     MDataHandle genHandle = data.inputValue(aGenerateMotionLines, &status);
     McheckErr(status, "Failed to obtain data handle for applyElongation");
     bool genMotionLines = genHandle.asBool();
-    MDataHandle cacheLoadedHandle = data.inputValue(aCacheLoaded, &status);
-    bool cacheLoaded = cacheLoadedHandle.asBool();
-    if (!genMotionLines || !cacheLoaded) {
-        MFnMeshData meshData;
-        MObject newOutput = meshData.create(&status);
-        MDataHandle outputHandle = data.outputValue(aOutputMesh, &status);
-        CHECK_MSTATUS_AND_RETURN_IT(status);
-        outputHandle.set(newOutput);
-        data.setClean(plug);
 
+    // Only generate motion lines if it is enabled 
+    if (!genMotionLines) {
+        setMotionLinesNone(plug, data);
         return MS::kSuccess;
     }
 
-    // +++ Get time value +++
-    MTime currentTime = data.inputValue(time, &status).asTime();
-    McheckErr(status, "Failed to get time value");
-    double frame = currentTime.as(MTime::kFilm);  // Get time in frames
+    MDataHandle cacheLoadedHandle = data.inputValue(aCacheLoaded, &status);
+    bool cacheLoaded = cacheLoadedHandle.asBool();
 
+    // Get shape and mesh path and determine if the mesh is articulated or not 
     MDataHandle inputHandle = data.inputValue(aInputMesh, &status);
     McheckErr(status, "Failed to get input mesh");
     MObject inputObj = inputHandle.asMesh();
@@ -383,6 +389,29 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kFailure;
     }
 
+    // Get DAG paths for mesh and transform
+    MFnDependencyNode thisNodeFn(thisMObject());
+    MPlug inputPlug = thisNodeFn.findPlug(aInputMesh, true);
+
+    MDagPath shapePath, transformPath;
+    status = Smear::getDagPathsFromInputMesh(inputObj, inputPlug, transformPath, shapePath);
+    McheckErr(status, "Failed to transform path and shape path from input object");
+
+    // +++ Get time value +++
+    MTime currentTime = data.inputValue(time, &status).asTime();
+    McheckErr(status, "Failed to get time value");
+    double frame = currentTime.as(MTime::kFilm);  // Get time in frames
+
+    if (Smear::isMeshArticulated(shapePath)) {
+        return MS::kSuccess; 
+    }
+    else {
+        return computeSimple(status, inputObj, data, shapePath, transformPath, frame, plug);
+    }
+}
+
+const MStatus& MotionLinesNode::computeSimple(MStatus& status, MObject& inputObj, MDataBlock& data, MDagPath& shapePath, MDagPath& transformPath, double frame, const MPlug& plug)
+{
     // Create new mesh data container
     MFnMeshData meshData;
     MObject newOutput = meshData.create(&status);
@@ -392,14 +421,6 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
     MFnMesh inputFn(inputObj);
     MObject copiedMesh = inputFn.copy(inputObj, newOutput, &status);
     McheckErr(status, "Mesh copy failed");
-
-    // Get DAG paths for mesh and transform
-    MFnDependencyNode thisNodeFn(thisMObject());
-    MPlug inputPlug = thisNodeFn.findPlug(aInputMesh, true);
-
-    MDagPath shapePath, transformPath;
-    status = Smear::getDagPathsFromInputMesh(inputObj, inputPlug, transformPath, shapePath);
-    McheckErr(status, "Failed to transform path and shape path from input object");
 
     // Cast copied Mesh into MFnMesh
     MFnMesh outputFn(copiedMesh, &status);
@@ -414,28 +435,26 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
     int motionLinesCount = data.inputValue(aMotionLinesCount).asInt();
     if (cachedMotionLinesCount != motionLinesCount) {
         selectSeeds(motionLinesCount);
-        cachedMotionLinesCount = motionLinesCount; 
+        cachedMotionLinesCount = motionLinesCount;
     }
 
     // +++ Compute motion offsets using Smear functions +++
     if (!motionOffsetsBaked) {
-        status = Smear::computeMotionOffsetsSimple(shapePath, transformPath, motionOffsets);
-        
-        
+        status = Smear::computeMotionOffsetsSimple(shapePath, transformPath, motionOffsetsSimple);
 
         McheckErr(status, "Failed to compute motion offsets");
         motionOffsetsBaked = true;
     }
 
-    int frameIndex = static_cast<int>(frame - motionOffsets.startFrame);
+    int frameIndex = static_cast<int>(frame - motionOffsetsSimple.startFrame);
 
-    if (frameIndex < 0 || frameIndex >= motionOffsets.motionOffsets.size()) {
+    if (frameIndex < 0 || frameIndex >= motionOffsetsSimple.motionOffsets.size()) {
         return MS::kSuccess;
     }
 
     // --- Commented out actual motion lines generation ---
-    const MDoubleArray& offsets = motionOffsets.motionOffsets[frameIndex];
-    const std::vector<MPointArray>& trajectories = motionOffsets.vertexTrajectories;
+    const MDoubleArray& offsets = motionOffsetsSimple.motionOffsets[frameIndex];
+    const std::vector<MPointArray>& trajectories = motionOffsetsSimple.vertexTrajectories;
     const int numFrames = trajectories.size();
 
     // Compute smoothed offsets, etc.
@@ -447,10 +466,10 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
         double smoothed = 0.0;
         for (int n = -N; n <= N; ++n) {
             const int frame = frameIndex + n;
-            if (frame < 0 || frame >= motionOffsets.motionOffsets.size()) continue;
+            if (frame < 0 || frame >= motionOffsetsSimple.motionOffsets.size()) continue;
             const double normalized = std::abs(n) / static_cast<double>(N + 1);
             const double weight = std::pow(1.0 - std::pow(normalized, 2.0), 2.0);
-            smoothed += motionOffsets.motionOffsets[frame][vertIdx] * weight;
+            smoothed += motionOffsetsSimple.motionOffsets[frame][vertIdx] * weight;
             totalWeight += weight;
         }
         smoothedOffsets[vertIdx] = totalWeight > 0.0 ? smoothed / totalWeight : offsets[vertIdx];
@@ -463,7 +482,7 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
     // Artistic control param
     const double strengthPast = data.inputValue(aStrengthPast).asDouble();
     const double strengthFuture = data.inputValue(aStrengthFuture).asDouble();
-    const int segmentCount = 3;  
+    const int segmentCount = 3;
     const double cylinderRadius = 0.05;
 
     for (unsigned int s = 0; s < seedIndices.length(); s++) {
@@ -505,7 +524,7 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
 
     MFnMesh meshFn;
     MObject motionLinesMesh = meshFn.create(mlPoints.length(), mlFaceCounts.length(),
-                            mlPoints, mlFaceCounts, mlFaceConnects, newOutput, &status);
+        mlPoints, mlFaceCounts, mlFaceConnects, newOutput, &status);
     if (status != MS::kSuccess) {
         MGlobal::displayError("Motion lines mesh creation failed.");
         return status;
@@ -517,81 +536,4 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
     data.setClean(plug);
 
     return MS::kSuccess;
-    */
 }
-
-//MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
-//    MStatus status;
-//
-//    // +++ Get time value +++
-//    MTime currentTime = data.inputValue(time, &status).asTime();
-//    McheckErr(status, "Failed to get time value");
-//    double frame = currentTime.as(MTime::kFilm);  // Get time in frames
-//
-//    // --- Get the input mesh (even though we won’t be using it, we check it for validity) ---
-//    MDataHandle inputHandle = data.inputValue(aInputMesh, &status);
-//    McheckErr(status, "Failed to get input mesh");
-//    MObject inputObj = inputHandle.asMesh();
-//    if (inputObj.isNull() || !inputObj.hasFn(MFn::kMesh)) {
-//        MGlobal::displayError("Input is not a valid mesh");
-//        return MS::kFailure;
-//    }
-//
-//    // Create new mesh data container
-//    MFnMeshData meshData;
-//    MObject newOutput = meshData.create(&status);
-//    McheckErr(status, "Failed to create output mesh container");
-//
-//    // --- For debugging, create a cube mesh and output that ---
-//
-//    // Define cube vertices (a cube centered at origin, edge length 2)
-//    MPointArray cubePoints;
-//    cubePoints.append(MPoint(-1.0, -1.0, -1.0));  // 0
-//    cubePoints.append(MPoint(1.0, -1.0, -1.0));  // 1
-//    cubePoints.append(MPoint(1.0, 1.0, -1.0));  // 2
-//    cubePoints.append(MPoint(-1.0, 1.0, -1.0));  // 3
-//    cubePoints.append(MPoint(-1.0, -1.0, 1.0));  // 4
-//    cubePoints.append(MPoint(1.0, -1.0, 1.0));  // 5
-//    cubePoints.append(MPoint(1.0, 1.0, 1.0));  // 6
-//    cubePoints.append(MPoint(-1.0, 1.0, 1.0));  // 7
-//
-//    // Define face counts: 6 faces, each with 4 vertices.
-//    MIntArray cubeFaceCounts;
-//    for (int i = 0; i < 6; i++) {
-//        cubeFaceCounts.append(4);
-//    }
-//
-//    // Define face connectivity.
-//    // Front face (z = -1): vertices 0,1,2,3
-//    // Back face (z = 1): vertices 4,5,6,7
-//    // Top face (y = 1): vertices 3,2,6,7
-//    // Bottom face (y = -1): vertices 0,1,5,4
-//    // Left face (x = -1): vertices 0,3,7,4
-//    // Right face (x = 1): vertices 1,2,6,5
-//    MIntArray cubeFaceConnects;
-//    cubeFaceConnects.append(0); cubeFaceConnects.append(1); cubeFaceConnects.append(2); cubeFaceConnects.append(3);  // Front
-//    cubeFaceConnects.append(4); cubeFaceConnects.append(5); cubeFaceConnects.append(6); cubeFaceConnects.append(7);  // Back
-//    cubeFaceConnects.append(3); cubeFaceConnects.append(2); cubeFaceConnects.append(6); cubeFaceConnects.append(7);  // Top
-//    cubeFaceConnects.append(0); cubeFaceConnects.append(1); cubeFaceConnects.append(5); cubeFaceConnects.append(4);  // Bottom
-//    cubeFaceConnects.append(0); cubeFaceConnects.append(3); cubeFaceConnects.append(7); cubeFaceConnects.append(4);  // Left
-//    cubeFaceConnects.append(1); cubeFaceConnects.append(2); cubeFaceConnects.append(6); cubeFaceConnects.append(5);  // Right
-//
-//    // Create cube mesh using the defined arrays
-//    MFnMesh meshFn;
-//    MObject cubeMesh = meshFn.create(cubePoints.length(), cubeFaceCounts.length(),
-//        cubePoints, cubeFaceCounts, cubeFaceConnects,
-//        newOutput, &status);
-//    if (status != MS::kSuccess) {
-//        MGlobal::displayError("Cube mesh creation failed.");
-//        return status;
-//    }
-//
-//    // --- Debug: set output to debug cube mesh ---
-//    MDataHandle outputHandle = data.outputValue(aOutputMesh, &status);
-//    CHECK_MSTATUS_AND_RETURN_IT(status);
-//    outputHandle.set(newOutput);
-//    data.setClean(plug);
-//
-//    return MS::kSuccess;
-//}
-//

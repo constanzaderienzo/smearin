@@ -17,7 +17,7 @@ class MotionLinesNode : public MPxNode
 private: 
     // Caches motion offsets for simlpe objects. 
     // TODO: Add a way to cache motion offsets for non-simple objects
-    MotionOffsetsSimple motionOffsets;
+    MotionOffsetsSimple motionOffsetsSimple;
     // Tracks whether motion offsets are baked to avoid recomputation of offsets every frame
     bool motionOffsetsBaked;
     
@@ -34,6 +34,8 @@ public:
     static void* creator();
     static MStatus initialize();
     MStatus compute(const MPlug& plug, MDataBlock& data) override;
+
+    const MStatus& computeSimple(MStatus& status, MObject& inputObj, MDataBlock& data, MDagPath& shapePath, MDagPath& transformPath, double frame, const MPlug& plug);
 
     static MTypeId id;  // Unique node ID
 
@@ -53,10 +55,12 @@ public:
     static MObject inputControlMsg;
 
     // Helper function declarations for creating geometry
+    MStatus setMotionLinesNone(const MPlug& plug, MDataBlock& data);
     MObject MotionLinesNode::createMesh(const MTime& time, float angle, int stepSize, const MString& grammar, MObject& outData, MStatus& stat);
     MStatus appendCylinder(MPoint start, MPoint end, MPointArray& points, MIntArray& faceCounts, MIntArray& faceConnects);
     MObject createQuads(const MFloatPointArray& points, MObject& outData, MStatus& stat);
     MObject createReverseQuads(const MFloatPointArray& points, MObject& outData, MStatus& stat);
     MObject createTris(const MFloatPointArray& points, MObject& outData, MStatus& stat);
     MObject createReverseTris(const MFloatPointArray& points, MObject& outData, MStatus& stat);
+    
 };

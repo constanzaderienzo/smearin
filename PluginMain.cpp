@@ -320,17 +320,18 @@ if scripts_path not in sys.path:
 
 try:
     import vertex_cache_tool  # preload into sys.modules
-    print('[SMEARin] Preloaded vertex_cache_tool')
+    import gui
+    gui.add_smear_menu()
+    print('[SMEARin] Preloaded vertex_cache_tool and GUI scripts')
 except Exception as e:
     import traceback
     traceback.print_exc()
 )");
 
     // Adds plugin related GUI to the Maya toolbar
-    executeMELScript();
+    //executeMELScript();
 
-    //Smear::loadCache("C:\\Users\\Admin\\Documents\\School\\cis-6600-advanced-topics-in-computer-graphics\\SMEARin\\smearin\\cache\\cache.json"); 
-
+    
     return MStatus::kSuccess;
 }
 

@@ -45,8 +45,6 @@ def open_bake_smear_gui():
 
     cmds.showWindow("bakeSmearWindow")
 
-    # Start pre-process when opening the window (simulate it)
-    _start_preprocess()
 
 def _safe_bake():
     try:
@@ -123,72 +121,23 @@ def create_smear_related_nodes():
     # Restore the original selection after creating nodes
     cmds.select(target)  # Re-select the original mesh
 
-
-def smear_control_gui():
-    if cmds.window("smearControlWindow", exists=True):
-        cmds.deleteUI("smearControlWindow")
-
-    window = cmds.window("smearControlWindow", title="Smear Control Panel")
-    cmds.columnLayout(adjustableColumn=True)
-
-    cmds.button(
-        label="Bake Smear",
-        command=lambda *_: cmds.evalDeferred('import vertex_cache_tool; vertex_cache_tool.full_bake_and_trigger()')
-    )
-
-    # Elongated in-between frame
-    cmds.frameLayout(label="Elongated in-between", collapsable=True, collapse=False)
-    cmds.columnLayout(adjustableColumn=True)
-
-    cmds.checkBox("applyElongationCheckbox", label="Apply Elongation")
-    cmds.connectControl("applyElongationCheckbox", "smearControl1.applyElongation")
-
-    cmds.floatSliderGrp("pastStrengthSlider", label="Past Strength:", field=True, min=0, max=150)
-    cmds.connectControl("pastStrengthSlider", "smearControl1.sp")
-
-    cmds.floatSliderGrp("futureStrengthSlider", label="Future Strength:", field=True, min=0, max=150)
-    cmds.connectControl("futureStrengthSlider", "smearControl1.sf")
-
-    cmds.intSliderGrp("elongationSmoothWindowSlider", label="Smooth Window:", field=True, min=0, max=5)
-    cmds.connectControl("elongationSmoothWindowSlider", "smearControl1.sw")
-
-    cmds.setParent("..")  # End columnLayout
-    cmds.setParent("..")  # End frameLayout
-
-    # Motion Lines frame
-    cmds.frameLayout(label="Motion Lines", collapsable=True, collapse=False)
-    cmds.columnLayout(adjustableColumn=True)
-
-    cmds.checkBox("generateMotionLinesCheckbox", label="Generate Motion Lines")
-    cmds.connectControl("generateMotionLinesCheckbox", "smearControl1.generateMotionLines")
-
-    cmds.intSliderGrp("motionLinesCountSlider", label="Motion Lines Count:", field=True, min=0, max=100)
-    cmds.connectControl("motionLinesCountSlider", "smearControl1.motionLinesCount")
-
-    cmds.floatSliderGrp("motionLinesPastStrengthSlider", label="Motion Lines Past Strength:", field=True, min=0, max=150)
-    cmds.connectControl("motionLinesPastStrengthSlider", "smearControl1.motionLinesStrengthPast")
-
-    cmds.floatSliderGrp("motionLinesFutureStrengthSlider", label="Motion Lines Future Strength:", field=True, min=0, max=150)
-    cmds.connectControl("motionLinesFutureStrengthSlider", "smearControl1.motionLinesStrengthFuture")
-
-    cmds.intSliderGrp("motionLinesSmoothWindowSlider", label="Motion Lines Smooth Window:", field=True, min=0, max=5)
-    cmds.connectControl("motionLinesSmoothWindowSlider", "smearControl1.motionLinesSmoothWindow")
-
-    cmds.setParent("..")  # End columnLayout
-    cmds.setParent("..")  # End frameLayout
-
-    cmds.showWindow(window)
-
-
 def enable_settings():
-    """Enable the settings controls in the GUI after the pre-process completes."""
-    cmds.checkBox("applyElongationCheckbox", edit=True, enable=True)
-    cmds.floatSliderGrp("pastStrengthSlider", edit=True, enable=True)
-    cmds.floatSliderGrp("futureStrengthSlider", edit=True, enable=True)
-    cmds.intSliderGrp("elongationSmoothWindowSlider", edit=True, enable=True)
-    
-    cmds.checkBox("generateMotionLinesCheckbox", edit=True, enable=True)
-    cmds.intSliderGrp("motionLinesCountSlider", edit=True, enable=True)
-    cmds.floatSliderGrp("motionLinesPastStrengthSlider", edit=True, enable=True)
-    cmds.floatSliderGrp("motionLinesFutureStrengthSlider", edit=True, enable=True)
-    cmds.intSliderGrp("motionLinesSmoothWindowSlider", edit=True, enable=True)
+    # now the control node exists—bind each UI control and turn it on
+    cmds.connectControl("applyElongationCheckbox",       "smearControl1.apl")
+    cmds.connectControl("pastStrengthSlider",            "smearControl1.sp")
+    cmds.connectControl("futureStrengthSlider",          "smearControl1.sf")
+    cmds.connectControl("elongationSmoothWindowSlider",  "smearControl1.sw")
+
+    cmds.connectControl("generateMotionLinesCheckbox",   "smearControl1.gml")
+    cmds.connectControl("motionLinesCountSlider",        "smearControl1.mlcnt")
+    cmds.connectControl("motionLinesPastStrengthSlider", "smearControl1.mlsp")
+    cmds.connectControl("motionLinesFutureStrengthSlider","smearControl1.mlsf")
+    cmds.connectControl("motionLinesSmoothWindowSlider", "smearControl1.mlsw")
+
+    # now enable them
+    for ctrl in [
+      "applyElongationCheckbox","pastStrengthSlider","futureStrengthSlider","elongationSmoothWindowSlider",
+      "generateMotionLinesCheckbox","motionLinesCountSlider","motionLinesPastStrengthSlider",
+      "motionLinesFutureStrengthSlider","motionLinesSmoothWindowSlider"
+    ]:
+        cmds.control(ctrl, edit=True, enable=True)

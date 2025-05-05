@@ -67,7 +67,8 @@ def get_anim_vertices_and_joints_maya(start_frame, end_frame, progress_fn=None):
     mesh = get_selected_mesh()
     skin_cluster = get_skin_cluster(mesh)
     if not skin_cluster:
-        raise RuntimeError("Mesh is not skinned or has no skinCluster.")
+        cmds.warning(f"Mesh '{mesh}' has no skinCluster. Proceeding without skin deformation support.")
+        return
 
     joints = get_influencing_joints(skin_cluster)
 

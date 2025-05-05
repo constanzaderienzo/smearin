@@ -489,7 +489,6 @@ MStatus Smear::getSkinClusterAndBones(const MDagPath& inputPath,
     }
 
     if (shapeObj.isNull()) {
-        MGlobal::displayError("No shape found under transform: " + meshPath.fullPathName());
         return MS::kFailure;
     }
 
@@ -520,7 +519,6 @@ MStatus Smear::getSkinClusterAndBones(const MDagPath& inputPath,
                 // Get influences
                 skinFn.influenceObjects(influenceBones, &status);
                 if (!status) {
-                    MGlobal::displayError("Failed to get influences");
                     return status;
                 }
 
@@ -532,7 +530,6 @@ MStatus Smear::getSkinClusterAndBones(const MDagPath& inputPath,
         itSkin.next();
     }
 
-    MGlobal::displayError("No matching skinCluster found for mesh: " + meshPath.fullPathName());
     return MS::kFailure;
 }
 

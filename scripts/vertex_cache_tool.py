@@ -7,7 +7,7 @@ from utils import cache_vertex_trajectories_with_deltas
 
 import os
 import maya.cmds as cmds
-from utils import cache_vertex_trajectories_with_deltas
+from utils import cache_vertex_trajectories_with_deltas, get_skin_cluster
 
 def run_preprocess(progress_fn=None):
     sel = cmds.ls(selection=True)
@@ -23,27 +23,19 @@ def run_preprocess(progress_fn=None):
 
     meshShape = shapes[0]
 
+    skin_cluster = get_skin_cluster(transform)
+    if not skin_cluster:
+        cmds.warning(f"Mesh '{transform}' is not skinned. Skipping smear bake.")
+        return None
+
     # make a cache folder next to current working dir
     cache_dir = os.path.join(os.getcwd(), "cache")
     os.makedirs(cache_dir, exist_ok=True)
-    output_path = os.path.join(cache_dir, "cache.json")
+    safe_name = meshShape.replace("|", "_").replace(":", "_")
+    output_path = os.path.join(cache_dir, f"{safe_name}_cache.json")
 
     # now pass the shape name, not an MDagPath
     cache_vertex_trajectories_with_deltas(meshShape, output_path, progress_fn=progress_fn)
 
     print(f"[SMEARin] Preprocessing complete. Cache written to {output_path}")
     return output_path
-
-
-def full_bake_and_trigger():
-    try:
-        path = run_preprocess() 
-        if path:
-            clean_path = path.replace('\\', '/')
-
-            mel.eval(f'loadCache "{clean_path}"')
-
-            cmds.setAttr("smearControl1.cacheLoaded", 1)
-            cmds.refresh() 
-    except Exception as e:
-        cmds.error(f"[SMEARin] Bake failed: {e}")

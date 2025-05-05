@@ -31,6 +31,8 @@ public:
     static MObject aMotionLinesStrengthPast; // Controls the length of the backward (trailing) motion lines effect.
     static MObject aMotionLinesStrengthFuture; // Controls the length of the forward (leading) motion lines effect.
     static MObject aMotionLinesSmoothWindow; // Controls the size of the smoothing window.
+    static MObject aMotionLinesSegments; // Controls how many segments make up a motion line 
+    static MObject aMotionLinesRadius; // Controls the thickness of motion lines 
     static MObject aGenerateMotionLines;
 
     // Message attribute to connect to the deformer node.

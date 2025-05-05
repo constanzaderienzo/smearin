@@ -136,32 +136,26 @@ MStatus MotionLinesNode::initialize() {
     CHECK_MSTATUS_AND_RETURN_IT(status);
     addAttribute(smoothEnabled);
 
-    // Elongation Smooth Window Size (integer slider)
+    // Motion lines Smooth Window Size (integer slider)
     smoothWindowSize = nAttr.create("smoothWindow", "smwin", MFnNumericData::kInt, 2, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
     nAttr.setMin(0);
     nAttr.setMax(5);
     addAttribute(smoothWindowSize);
 
-    // The length of the backward (trailing) elongation effect 
-    aStrengthPast = nAttr.create("strengthPast", "ps", MFnNumericData::kDouble, 1.5, &status);
+    // The length of the backward (trailing) motion lines effect 
+    aStrengthPast = nAttr.create("strengthPast", "ps", MFnNumericData::kDouble, 2.5, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
     nAttr.setMin(0);
     nAttr.setMax(5);
     addAttribute(aStrengthPast);
 
-    // The length of the forward (leading) elongation effect
-    aStrengthFuture = nAttr.create("strengthFuture", "fs", MFnNumericData::kDouble, 1.5, &status);
+    // The length of the forward (leading) motion lines effect
+    aStrengthFuture = nAttr.create("strengthFuture", "fs", MFnNumericData::kDouble, 2.5, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
     nAttr.setMin(0);
     nAttr.setMax(5);
     addAttribute(aStrengthFuture);
-
-    // Number of segments per line (int)
-    aMotionLineSegments = nAttr.create("motionLineSegments", "mlseg", MFnNumericData::kInt, 3, &status);
-    CHECK_MSTATUS_AND_RETURN_IT(status);
-    nAttr.setMin(1);
-    addAttribute(aMotionLineSegments);
 
     // Boolean attribute for applying motion lines generation.
     aGenerateMotionLines = nAttr.create("generateMotionLines", "gen", MFnNumericData::kBoolean, true, &status);
@@ -170,16 +164,29 @@ MStatus MotionLinesNode::initialize() {
     nAttr.setKeyable(false);
     addAttribute(aGenerateMotionLines);
 
-    // Elongation Smooth Window Size (integer slider)
+    // Motion Lines Smooth Window Size (integer slider)
     aMotionLinesCount = nAttr.create("motionLinesCount", "mlcnt", MFnNumericData::kInt, 15, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setStorable(false);
+    nAttr.setKeyable(false);
     nAttr.setMin(0);
     nAttr.setMax(100);
     addAttribute(aMotionLinesCount);
 
+    // Number of segments per line (int)
+    aMotionLineSegments = nAttr.create("motionLineSegments", "mlseg", MFnNumericData::kInt, 3, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setStorable(false);
+    nAttr.setKeyable(false);
+    nAttr.setMin(1);
+    nAttr.setMax(100);
+    addAttribute(aMotionLineSegments);
+
     // Radius of the cylinders that make up a motion line
     aRadius = nAttr.create("motionLinesRadius", "mlr", MFnNumericData::kDouble, 0.05, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setStorable(false);
+    nAttr.setKeyable(false);
     nAttr.setMin(0);
     nAttr.setMax(1.0);
     addAttribute(aRadius);

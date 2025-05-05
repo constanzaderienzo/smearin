@@ -22,6 +22,8 @@ MObject SmearControlNode::aMotionLinesStrengthPast;
 MObject SmearControlNode::aMotionLinesStrengthFuture; 
 MObject SmearControlNode::aMotionLinesSmoothWindow; 
 MObject SmearControlNode::aGenerateMotionLines;
+MObject SmearControlNode::aMotionLinesSegments;
+MObject SmearControlNode::aMotionLinesRadius; 
 
 MObject SmearControlNode::aControlMsg;
 MObject SmearControlNode::aCacheLoaded;
@@ -127,6 +129,24 @@ MStatus SmearControlNode::initialize() {
     nAttr.setStorable(true);
     nAttr.setKeyable(true);
     addAttribute(aGenerateMotionLines);
+
+    // Elongation Smooth Window Size (integer slider)
+    aMotionLinesSegments = nAttr.create("motionLinesSegments", "mlseg", MFnNumericData::kInt, 15, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setStorable(true);
+    nAttr.setKeyable(true);
+    nAttr.setMin(0);
+    nAttr.setMax(100);
+    addAttribute(aMotionLinesSegments);
+
+    // Radius of the cylinders that make up a motion line
+    aMotionLinesRadius = nAttr.create("motionLinesRadius", "mlr", MFnNumericData::kDouble, 0.05, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setStorable(true);
+    nAttr.setKeyable(true);
+    nAttr.setMin(0);
+    nAttr.setMax(1.0);
+    addAttribute(aMotionLinesRadius);
 
     // Create and add a message attribute.
     aControlMsg = mAttr.create("controlMessage", "ctrlMsg", &status);

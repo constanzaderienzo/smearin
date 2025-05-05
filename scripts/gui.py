@@ -80,6 +80,8 @@ def open_bake_smear_gui():
     cmds.intSliderGrp("motionLinesCountSlider", label="Motion Lines Count:", field=True, min=0, max=100, enable=False)
     cmds.floatSliderGrp("motionLinesPastStrengthSlider", label="Motion Lines Past Strength:", field=True, min=0, max=5, enable=False)
     cmds.floatSliderGrp("motionLinesFutureStrengthSlider", label="Motion Lines Future Strength:", field=True, min=0, max=5, enable=False)
+    cmds.intSliderGrp("motionLinesSegmentsSlider", label="Motion Lines Segments Count:", field=True, min=0, max=100, enable=False)
+    cmds.floatSliderGrp("motionLinesRadiusSlider", label="Motion Lines Radius:", field=True, min=0, max=2, enable=False)
     cmds.intSliderGrp("motionLinesSmoothWindowSlider", label="Motion Lines Smooth Window:", field=True, min=0, max=5, enable=False)
 
     cmds.setParent("..")  # End columnLayout
@@ -184,6 +186,8 @@ def create_smear_related_nodes():
     cmds.connectAttr(f"{control_node}.motionLinesSmoothWindow", f"{motion_lines_node}.smwin")
     cmds.connectAttr(f"{control_node}.motionLinesCount", f"{motion_lines_node}.mlcnt")
     cmds.connectAttr(f"{control_node}.generateMotionLines", f"{motion_lines_node}.gen")
+    cmds.connectAttr(f"{control_node}.motionLinesSegments", f"{motion_lines_node}.mlseg")
+    cmds.connectAttr(f"{control_node}.motionLinesRadius", f"{motion_lines_node}.mlr")
     cmds.connectAttr(f"{control_node}.cacheLoaded", f"{motion_lines_node}.cl")
     
     print("[SMEARin] Smear setup created successfully.")
@@ -202,6 +206,8 @@ def enable_settings():
     cmds.connectControl("motionLinesCountSlider",        "smearControl1.mlcnt")
     cmds.connectControl("motionLinesPastStrengthSlider", "smearControl1.mlsp")
     cmds.connectControl("motionLinesFutureStrengthSlider","smearControl1.mlsf")
+    cmds.connectControl("motionLinesSegmentsSlider","smearControl1.mlseg")
+    cmds.connectControl("motionLinesRadiusSlider","smearControl1.mlr")
     cmds.connectControl("motionLinesSmoothWindowSlider", "smearControl1.mlsw")
 
     # now enable them

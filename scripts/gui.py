@@ -29,15 +29,15 @@ def open_bake_smear_gui():
 
     # Elongated in-between frame
     cmds.checkBox("applyElongationCheckbox", label="Apply Elongation", enable=False)
-    cmds.floatSliderGrp("pastStrengthSlider", label="Past Strength:", field=True, min=0, max=150, enable=False)
-    cmds.floatSliderGrp("futureStrengthSlider", label="Future Strength:", field=True, min=0, max=150, enable=False)
+    cmds.floatSliderGrp("pastStrengthSlider", label="Past Strength:", field=True, min=0, max=5, enable=False)
+    cmds.floatSliderGrp("futureStrengthSlider", label="Future Strength:", field=True, min=0, max=5, enable=False)
     cmds.intSliderGrp("elongationSmoothWindowSlider", label="Smooth Window:", field=True, min=0, max=5, enable=False)
 
     # Motion Lines frame
     cmds.checkBox("generateMotionLinesCheckbox", label="Generate Motion Lines", enable=False)
     cmds.intSliderGrp("motionLinesCountSlider", label="Motion Lines Count:", field=True, min=0, max=100, enable=False)
-    cmds.floatSliderGrp("motionLinesPastStrengthSlider", label="Motion Lines Past Strength:", field=True, min=0, max=150, enable=False)
-    cmds.floatSliderGrp("motionLinesFutureStrengthSlider", label="Motion Lines Future Strength:", field=True, min=0, max=150, enable=False)
+    cmds.floatSliderGrp("motionLinesPastStrengthSlider", label="Motion Lines Past Strength:", field=True, min=0, max=5, enable=False)
+    cmds.floatSliderGrp("motionLinesFutureStrengthSlider", label="Motion Lines Future Strength:", field=True, min=0, max=5, enable=False)
     cmds.intSliderGrp("motionLinesSmoothWindowSlider", label="Motion Lines Smooth Window:", field=True, min=0, max=5, enable=False)
 
     cmds.setParent("..")  # End columnLayout
@@ -122,7 +122,7 @@ def create_smear_related_nodes():
     cmds.select(target)  # Re-select the original mesh
 
 def enable_settings():
-    # now the control node exists—bind each UI control and turn it on
+    # now the control node existsï¿½bind each UI control and turn it on
     cmds.connectControl("applyElongationCheckbox",       "smearControl1.apl")
     cmds.connectControl("pastStrengthSlider",            "smearControl1.sp")
     cmds.connectControl("futureStrengthSlider",          "smearControl1.sf")

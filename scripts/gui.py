@@ -16,17 +16,44 @@ def open_bake_smear_gui():
 
     # Create a new window
     cmds.window("bakeSmearWindow", title="Bake Smear")
-    cmds.columnLayout(adjustableColumn=True)
+
+    # formLayout to give us margin around the inner column
+    fl = cmds.formLayout("mainForm")
+
+    # inner columnLayout
+    cl = cmds.columnLayout(adjustableColumn=True, rowSpacing=8, columnAlign="left")
+
+    # Attach the columnLayout to all sides of the formLayout (with optional margins)
+    cmds.formLayout(fl, edit=True, attachForm=[
+        (cl, 'top', 10),
+        (cl, 'left', 10),
+        (cl, 'right', 10),
+        (cl, 'bottom', 10)
+    ])
 
     # Bake Smear button
     cmds.button(
         label="Bake Smear",
+        height=32,
         command=lambda *_: _safe_bake()
     )
 
+    cmds.separator(height=10, style="in")
+
     # Settings Frame (Initially disabled)
-    cmds.frameLayout(label="Settings", collapsable=True, collapse=False)
-    cmds.columnLayout(adjustableColumn=True)
+
+    cmds.frameLayout(
+        "elongatedFrame",
+        label="Elongated In-Between",
+        collapsable=True,
+        marginHeight=8,
+        marginWidth=8
+    )
+    cmds.columnLayout(
+        adjustableColumn=True,
+        rowSpacing=6,
+        columnAlign="left"
+    )
 
     # Elongated in-between frame
     cmds.checkBox("applyElongationCheckbox", label="Apply Elongation", enable=False)
@@ -35,6 +62,20 @@ def open_bake_smear_gui():
     cmds.intSliderGrp("elongationSmoothWindowSlider", label="Smooth Window:", field=True, min=0, max=5, enable=False)
 
     # Motion Lines frame
+    cmds.setParent("..")  # End columnLayout
+    cmds.setParent("..") 
+    cmds.frameLayout(
+        "motionLinesFrame",
+        label="Motion Lines",
+        collapsable=True,
+        marginHeight=8,
+        marginWidth=8
+    )
+    cmds.columnLayout(
+        adjustableColumn=True,
+        rowSpacing=6,
+        columnAlign="left"
+    )
     cmds.checkBox("generateMotionLinesCheckbox", label="Generate Motion Lines", enable=False)
     cmds.intSliderGrp("motionLinesCountSlider", label="Motion Lines Count:", field=True, min=0, max=100, enable=False)
     cmds.floatSliderGrp("motionLinesPastStrengthSlider", label="Motion Lines Past Strength:", field=True, min=0, max=5, enable=False)

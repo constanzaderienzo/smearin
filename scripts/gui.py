@@ -1,4 +1,5 @@
 import maya.cmds as cmds
+import maya.mel as mel    
 
 def add_smear_menu():
     # Add the "SMEAR" menu to the top bar
@@ -45,11 +46,28 @@ def open_bake_smear_gui():
 
     cmds.showWindow("bakeSmearWindow")
 
+def show_progress_bar():
+    if cmds.window("bakeProgressWin", exists=True):
+        cmds.deleteUI("bakeProgressWin")
+    cmds.window("bakeProgressWin", title="Baking…", sizeable=False)
+    cmds.columnLayout()
+    cmds.progressBar("bakeProgressBar", maxValue=100, width=300)
+    cmds.showWindow("bakeProgressWin")
+
+def update_progress(val):
+    if cmds.progressBar("bakeProgressBar", exists=True):
+        cmds.progressBar("bakeProgressBar", edit=True, progress=val)
+
+def hide_progress_bar():
+    if cmds.window("bakeProgressWin", exists=True):
+        cmds.deleteUI("bakeProgressWin")
 
 def _safe_bake():
     try:
-        # Set the wait cursor (hourglass)
+        show_progress_bar()
+        # Set the wait cursor
         cmds.waitCursor(state=True)
+        update_progress(0)
 
         if not cmds.objExists("smearControl1"):
             create_smear_related_nodes()
@@ -63,8 +81,17 @@ def _safe_bake():
         
         # Perform the baking operation on the selected mesh
         import vertex_cache_tool
-        vertex_cache_tool.full_bake_and_trigger()
+        cache_path = vertex_cache_tool.run_preprocess(progress_fn=update_progress)
+        # Step 2: load the cache via MEL
+        if cache_path:
+            clean = cache_path.replace("\\","/")
+            mel.eval(f'loadCache "{clean}"')
+        update_progress(95)
 
+        # Step 3: finalize
+        cmds.setAttr("smearControl1.cacheLoaded",1)
+        cmds.refresh()
+        update_progress(100)
         enable_settings()
 
     except Exception as e:
@@ -75,6 +102,8 @@ def _safe_bake():
     finally:
         # Reset the wait cursor back to the default cursor
         cmds.waitCursor(state=False)
+        if cmds.window("bakeProgressWin", exists=True):
+            cmds.deleteUI("bakeProgressWin")
 
 def create_smear_related_nodes():
     # Store the current selection

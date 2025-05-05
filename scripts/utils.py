@@ -48,7 +48,6 @@ def get_vertex_positions(mesh, frame):
 
     # Print debug info
     current_time = cmds.currentTime(query=True)
-    print(f"[DEBUG] Requested frame: {frame}, Maya currentTime: {current_time}")
 
     # Get the mesh DAG path
     sel = om.MSelectionList()
@@ -64,7 +63,7 @@ def get_vertex_positions(mesh, frame):
 
     return np.array([[v.x, v.y, v.z] for v in verts])
 
-def get_anim_vertices_and_joints_maya(start_frame, end_frame):
+def get_anim_vertices_and_joints_maya(start_frame, end_frame, progress_fn=None):
     mesh = get_selected_mesh()
     skin_cluster = get_skin_cluster(mesh)
     if not skin_cluster:
@@ -74,9 +73,11 @@ def get_anim_vertices_and_joints_maya(start_frame, end_frame):
 
     anim_vertices = {}
     anim_joints = {}
-
-    for frame in range(start_frame, end_frame + 1):
-        print(f"Processing frame {frame}")
+    frames = range(start_frame, end_frame + 1)
+    num = end_frame - start_frame + 1
+    for i, frame in enumerate(frames):
+        if progress_fn:
+            progress_fn(int(15 * i / num))
         # Per-vertex world-space positions
         anim_vertices[frame] = get_vertex_positions(mesh, frame)
 
@@ -129,8 +130,6 @@ def get_skin_weights(mesh, skin_cluster, joints):
                 W[v, col] = w
             else:
                 print(f"[WARN] Skipping joint '{joint_name}' not found in col_of_joint")
-
-    print(f"[DEBUG] First 5 rows of weights:\n{W[:5]}\n")
 
     return W
 
@@ -200,7 +199,7 @@ def slerp(v0, v1, t):
     so = np.sin(omega)
     return (np.sin((1.0 - t) * omega) / so) * v0 + (np.sin(t * omega) / so) * v1
 
-def build_deltas(verts, joints, weights_arr, joints_list, window=2):
+def build_deltas(verts, joints, weights_arr, joints_list, window=2, progress_fn=None):
     frames = sorted(verts.keys())
     num_frames = len(frames)
     num_verts = len(verts[frames[0]])
@@ -208,8 +207,10 @@ def build_deltas(verts, joints, weights_arr, joints_list, window=2):
 
     deltas = {}  # final result: deltas[frame][v] = scalar motion offset
 
-    for f in frames:
-        print(f"[INFO] Processing frame {f}")
+    for i, f in enumerate(frames):
+        if progress_fn:
+            progress_fn(15 + int(70 * i / len(frames)))
+
         deltas[f] = np.zeros(num_verts, dtype=np.float32)
 
         for k, joint_name in enumerate(joints_list):
@@ -272,7 +273,8 @@ def build_deltas(verts, joints, weights_arr, joints_list, window=2):
                 deltas[f][v] += w * w_col * delta_raw
 
     # Temporal smoothing (Eq 2)
-    print("[INFO] Smoothing in time...")
+    if progress_fn:
+        progress_fn(90) 
     kernel = np.array([(1 - (n/(window+1))**2)**2 for n in range(-window, window+1)])
     kernel /= kernel.sum()
 
@@ -293,14 +295,14 @@ def get_scene_fps():
     }
     return unit_to_fps.get(unit, 24.0)
 
-def cache_vertex_trajectories_with_deltas(mesh_name, output_path):
+def cache_vertex_trajectories_with_deltas(mesh_name, output_path, progress_fn=None):
     # Frame range
     start = int(cmds.playbackOptions(q=True, min=True))
     end   = int(cmds.playbackOptions(q=True, max=True))
     frames = list(range(start, end + 1))
 
     # Load vertex and joint animation data
-    verts, joints = get_anim_vertices_and_joints_maya(start, end)
+    verts, joints = get_anim_vertices_and_joints_maya(start, end, progress_fn=progress_fn)
 
     # Skin cluster & joint info
     skin_cluster = get_skin_cluster(mesh_name)
@@ -308,7 +310,7 @@ def cache_vertex_trajectories_with_deltas(mesh_name, output_path):
     weights_arr = get_skin_weights(mesh_name, skin_cluster, joints_list)
 
     # Compute deltas
-    deltas = build_deltas(verts, joints, weights_arr, joints_list)
+    deltas = build_deltas(verts, joints, weights_arr, joints_list, 2, progress_fn=progress_fn)
     max_mag = max(
     np.max(np.abs(frame_deltas))
         for frame_deltas in deltas.values()

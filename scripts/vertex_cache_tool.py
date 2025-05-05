@@ -9,7 +9,7 @@ import os
 import maya.cmds as cmds
 from utils import cache_vertex_trajectories_with_deltas
 
-def run_preprocess():
+def run_preprocess(progress_fn=None):
     sel = cmds.ls(selection=True)
     if not sel:
         cmds.error("No object selected.")
@@ -29,7 +29,7 @@ def run_preprocess():
     output_path = os.path.join(cache_dir, "cache.json")
 
     # now pass the shape name, not an MDagPath
-    cache_vertex_trajectories_with_deltas(meshShape, output_path)
+    cache_vertex_trajectories_with_deltas(meshShape, output_path, progress_fn=progress_fn)
 
     print(f"[SMEARin] Preprocessing complete. Cache written to {output_path}")
     return output_path

@@ -653,3 +653,18 @@ void Smear::clearVertexCache() {
     vertexCount = 0;
     lastCachePath = "";
 }
+
+MPoint Smear::catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t) {
+    // SMEAR paper uses standard Catmull-Rom interpolation (Section 4.1)
+    const float t2 = t * t;
+    const float t3 = t2 * t;
+
+    // Basis matrix coefficients (as per original Catmull-Rom formulation)
+    const float a0 = -0.5f * t3 + t2 - 0.5f * t;
+    const float a1 = 1.5f * t3 - 2.5f * t2 + 1.0f;
+    const float a2 = -1.5f * t3 + 2.0f * t2 + 0.5f * t;
+    const float a3 = 0.5f * t3 - 0.5f * t2;
+
+    // Combine control points
+    return p0 * a0 + p1 * a1 + p2 * a2 + p3 * a3;
+}

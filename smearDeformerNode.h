@@ -70,7 +70,4 @@ private:
     double elongationStrengthFuture;
     bool smoothingEnabled;
     int N;
-
-    // Interpolation helper
-    MPoint catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t);
 };

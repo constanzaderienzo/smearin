@@ -182,7 +182,7 @@ MStatus SmearDeformerNode::deformSimple(MDataBlock& block, MItGeometry& iter, MD
         const MPoint& p2 = trajectories[f2][vertIdx];
         const MPoint& p3 = trajectories[f3][vertIdx];
 
-        MPoint interpolated = SmearDeformerNode::catmullRomInterpolate(p0, p1, p2, p3, t2);
+        MPoint interpolated = Smear::catmullRomInterpolate(p0, p1, p2, p3, t2);
 
         iter.setPosition(interpolated);
     }
@@ -248,7 +248,7 @@ MStatus SmearDeformerNode::deformArticulated(MDataBlock& block, MItGeometry& ite
         MPoint p3 = getPos(baseFrame + 2, vid);
 
         // evaluate spline
-        MPoint newP = catmullRomInterpolate(p0, p1, p2, p3, (float)u);
+        MPoint newP = Smear::catmullRomInterpolate(p0, p1, p2, p3, (float)u);
 
         // set the vertex
         iter.setPosition(newP);        
@@ -400,21 +400,6 @@ void SmearDeformerNode::applyDeformation(MItGeometry& iter, int frameIndex) {
         const MPoint& p2 = motionOffsets.vertexTrajectories[f2][idx];
         const MPoint& p3 = motionOffsets.vertexTrajectories[f3][idx];
 
-        iter.setPosition(catmullRomInterpolate(p0, p1, p2, p3, localT));
+        iter.setPosition(Smear::catmullRomInterpolate(p0, p1, p2, p3, localT));
     }
-}
-
-MPoint SmearDeformerNode::catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t) {
-    // SMEAR paper uses standard Catmull-Rom interpolation (Section 4.1)
-    const float t2 = t * t;
-    const float t3 = t2 * t;
-
-    // Basis matrix coefficients (as per original Catmull-Rom formulation)
-    const float a0 = -0.5f * t3 + t2 - 0.5f * t;
-    const float a1 = 1.5f * t3 - 2.5f * t2 + 1.0f;
-    const float a2 = -1.5f * t3 + 2.0f * t2 + 0.5f * t;
-    const float a3 = 0.5f * t3 - 0.5f * t2;
-
-    // Combine control points
-    return p0 * a0 + p1 * a1 + p2 * a2 + p3 * a3;
 }

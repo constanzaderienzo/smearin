@@ -36,6 +36,7 @@ MObject MotionLinesNode::smoothWindowSize;
 MObject MotionLinesNode::smoothEnabled;
 MObject MotionLinesNode::aStrengthPast;
 MObject MotionLinesNode::aStrengthFuture;
+MObject MotionLinesNode::aMotionLineSegments; 
 MObject MotionLinesNode::aGenerateMotionLines;
 MObject MotionLinesNode::aMotionLinesCount; 
 MObject MotionLinesNode::aRadius;
@@ -156,6 +157,12 @@ MStatus MotionLinesNode::initialize() {
     nAttr.setMax(5);
     addAttribute(aStrengthFuture);
 
+    // Number of segments per line (int)
+    aMotionLineSegments = nAttr.create("motionLineSegments", "mlseg", MFnNumericData::kInt, 3, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setMin(1);
+    addAttribute(aMotionLineSegments);
+
     // Boolean attribute for applying motion lines generation.
     aGenerateMotionLines = nAttr.create("generateMotionLines", "gen", MFnNumericData::kBoolean, true, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
@@ -190,6 +197,7 @@ MStatus MotionLinesNode::initialize() {
     attributeAffects(smoothWindowSize, aOutputMesh);
     attributeAffects(aStrengthPast, aOutputMesh);
     attributeAffects(aStrengthFuture, aOutputMesh);
+    attributeAffects(aMotionLineSegments, aOutputMesh); 
     attributeAffects(aGenerateMotionLines, aOutputMesh);
     attributeAffects(aMotionLinesCount, aOutputMesh);
     attributeAffects(aRadius, aOutputMesh);
@@ -465,8 +473,13 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
         // Artistic control param
         const double strengthPast = data.inputValue(aStrengthPast).asDouble();
         const double strengthFuture = data.inputValue(aStrengthFuture).asDouble();
+<<<<<<< Updated upstream
         const int segmentCount = 3;
         const double cylinderRadius = data.inputValue(aRadius).asDouble();
+=======
+        const int segmentCount = data.inputValue(aMotionLineSegments).asInt();
+        const double cylinderRadius = 0.05;
+>>>>>>> Stashed changes
 
         int motionLinesCount = data.inputValue(aMotionLinesCount).asInt();
         if (cachedMotionLinesCount != motionLinesCount) {
@@ -492,12 +505,36 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
             // Instead of sampling consecutive frames, multiply the segment index by the strength factor.
             MPointArray polyLine;
             for (int seg = 0; seg <= segmentCount; seg++) {
-                // Calculate a frame increment scaled by the strength factor.
-                int frameIncrement = static_cast<int>(round(seg * strengthFactor));
-                int lineSampleFrame = sampleFrame + frameIncrement * direction;
-                if (Smear::vertexCache.find(lineSampleFrame) == Smear::vertexCache.end())
-                    break; 
-                polyLine.append(Smear::vertexCache[lineSampleFrame].positions[vertexIndex]);
+                double totalLength = strengthFactor; // treat strength as total motion line length in frames
+                double frameInterval = totalLength / static_cast<double>(segmentCount);
+                double sampleOffset = seg * frameInterval * direction;
+                double sampleFrameD = sampleFrame + sampleOffset;
+
+                // Integer and fractional components
+                int f1 = static_cast<int>(floor(sampleFrameD));
+                float t = static_cast<float>(sampleFrameD - f1);
+
+                // Need f0, f1, f2, f3 for Catmull-Rom
+                int f0 = f1 - 1;
+                int f2 = f1 + 1;
+                int f3 = f1 + 2;
+
+                // Validate bounds
+                if (Smear::vertexCache.find(f0) == Smear::vertexCache.end() ||
+                    Smear::vertexCache.find(f1) == Smear::vertexCache.end() ||
+                    Smear::vertexCache.find(f2) == Smear::vertexCache.end() ||
+                    Smear::vertexCache.find(f3) == Smear::vertexCache.end())
+                {
+                    continue; // Or break;
+                }
+
+                const MPoint& p0 = Smear::vertexCache[f0].positions[vertexIndex];
+                const MPoint& p1 = Smear::vertexCache[f1].positions[vertexIndex];
+                const MPoint& p2 = Smear::vertexCache[f2].positions[vertexIndex];
+                const MPoint& p3 = Smear::vertexCache[f3].positions[vertexIndex];
+
+                MPoint interpolated = Smear::catmullRomInterpolate(p0, p1, p2, p3, t);
+                polyLine.append(interpolated);
             }
 
             // Create cylinder segments between consecutive polyline points.

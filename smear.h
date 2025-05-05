@@ -68,4 +68,7 @@ public:
 
     static bool loadCache(const MString& cachePath);
     static void clearVertexCache();
+
+    // Interpolation helper
+    static MPoint catmullRomInterpolate(const MPoint& p0, const MPoint& p1, const MPoint& p2, const MPoint& p3, float t);
 };

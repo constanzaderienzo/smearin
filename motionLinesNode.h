@@ -47,6 +47,7 @@ public:
     static MObject smoothEnabled;
     static MObject aStrengthPast;
     static MObject aStrengthFuture;
+    static MObject aMotionLineSegments; 
     static MObject aGenerateMotionLines;
     static MObject aMotionLinesCount;
     static MObject aRadius; 

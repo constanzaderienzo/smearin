@@ -38,6 +38,7 @@ MObject MotionLinesNode::aStrengthPast;
 MObject MotionLinesNode::aStrengthFuture;
 MObject MotionLinesNode::aGenerateMotionLines;
 MObject MotionLinesNode::aMotionLinesCount; 
+MObject MotionLinesNode::aRadius;
 MObject MotionLinesNode::inputControlMsg;  // Message attribute for connecting to the control node
 MObject MotionLinesNode::aCacheLoaded;
 
@@ -169,6 +170,13 @@ MStatus MotionLinesNode::initialize() {
     nAttr.setMax(100);
     addAttribute(aMotionLinesCount);
 
+    // Elongation Smooth Window Size (integer slider)
+    aRadius = nAttr.create("motionLinesRadius", "mlr", MFnNumericData::kDouble, 0.05, &status);
+    CHECK_MSTATUS_AND_RETURN_IT(status);
+    nAttr.setMin(0);
+    nAttr.setMax(0.2);
+    addAttribute(aRadius);
+
     // Message attribute for connecting this node to the control node.
     inputControlMsg = mAttr.create("inputControlMessage", "icm", &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
@@ -183,6 +191,8 @@ MStatus MotionLinesNode::initialize() {
     attributeAffects(aStrengthPast, aOutputMesh);
     attributeAffects(aStrengthFuture, aOutputMesh);
     attributeAffects(aGenerateMotionLines, aOutputMesh);
+    attributeAffects(aMotionLinesCount, aOutputMesh);
+    attributeAffects(aRadius, aOutputMesh);
     attributeAffects(inputControlMsg, aOutputMesh);
     attributeAffects(aCacheLoaded, aOutputMesh);
 
@@ -456,7 +466,7 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
         const double strengthPast = data.inputValue(aStrengthPast).asDouble();
         const double strengthFuture = data.inputValue(aStrengthFuture).asDouble();
         const int segmentCount = 3;
-        const double cylinderRadius = 0.05;
+        const double cylinderRadius = data.inputValue(aRadius).asDouble();
 
         int motionLinesCount = data.inputValue(aMotionLinesCount).asInt();
         if (cachedMotionLinesCount != motionLinesCount) {
@@ -465,7 +475,7 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
         }
 
         for (unsigned int s = 0; s < seedIndices.length(); s++) {
-            int vertexIndex = seedIndices[s];
+            int vertexIndex = seedIndices[s]; 
 
             // Get the smoothed offset for this vertex.
             double offset = smoothedOffsets[vertexIndex];

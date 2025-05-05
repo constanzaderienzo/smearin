@@ -48,7 +48,8 @@ public:
     static MObject aStrengthPast;
     static MObject aStrengthFuture;
     static MObject aGenerateMotionLines;
-    static MObject aMotionLinesCount; 
+    static MObject aMotionLinesCount;
+    static MObject aRadius; 
     static MObject aCacheLoaded;
 
     // Message attribute for connecting the control node.

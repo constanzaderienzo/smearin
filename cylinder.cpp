@@ -6,14 +6,16 @@ MPointArray CylinderMesh::gPoints;
 MVectorArray CylinderMesh::gNormals;
 MIntArray CylinderMesh::gFaceCounts;
 MIntArray CylinderMesh::gFaceConnects;
+double CylinderMesh::gLastRadius; 
 
 CylinderMesh::CylinderMesh(
    const MPoint& start, const MPoint& end, double _r) : 
     mStart(start), mEnd(end), r(_r)
 {
-    if (gPoints.length() == 0)
-    {
+    gLastRadius = -1.0;
+    if (gPoints.length() == 0 || std::abs(gLastRadius - r) > 1e-6) {
         initCylinderMesh(r);
+        gLastRadius = r;
     }
 }
 

@@ -37,6 +37,7 @@ protected:
     static MVectorArray gNormals;
     static MIntArray gFaceCounts;
     static MIntArray gFaceConnects;
+    static double gLastRadius;
 };
 
 #endif

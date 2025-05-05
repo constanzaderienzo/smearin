@@ -177,11 +177,11 @@ MStatus MotionLinesNode::initialize() {
     nAttr.setMax(100);
     addAttribute(aMotionLinesCount);
 
-    // Elongation Smooth Window Size (integer slider)
+    // Radius of the cylinders that make up a motion line
     aRadius = nAttr.create("motionLinesRadius", "mlr", MFnNumericData::kDouble, 0.05, &status);
     CHECK_MSTATUS_AND_RETURN_IT(status);
     nAttr.setMin(0);
-    nAttr.setMax(0.2);
+    nAttr.setMax(1.0);
     addAttribute(aRadius);
 
     // Message attribute for connecting this node to the control node.
@@ -273,11 +273,11 @@ MObject MotionLinesNode::createMesh(const MTime& time,
 }
 
 
-MStatus MotionLinesNode::appendCylinder(MPoint start, MPoint end,
+MStatus MotionLinesNode::appendCylinder(MPoint start, MPoint end, double radius, 
     MPointArray& points, MIntArray& faceCounts, MIntArray& faceConnects)
 {
-    // Create a cylinder between the two points (Radius = 0.1)
-    CylinderMesh cylinder(start, end, 0.1);
+    // Create a cylinder between the two points
+    CylinderMesh cylinder(start, end, radius);
     // Append cylinder geometry to the main mesh arrays.
     cylinder.appendToMesh(points, faceCounts, faceConnects);
 
@@ -473,13 +473,8 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
         // Artistic control param
         const double strengthPast = data.inputValue(aStrengthPast).asDouble();
         const double strengthFuture = data.inputValue(aStrengthFuture).asDouble();
-<<<<<<< Updated upstream
-        const int segmentCount = 3;
         const double cylinderRadius = data.inputValue(aRadius).asDouble();
-=======
         const int segmentCount = data.inputValue(aMotionLineSegments).asInt();
-        const double cylinderRadius = 0.05;
->>>>>>> Stashed changes
 
         int motionLinesCount = data.inputValue(aMotionLinesCount).asInt();
         if (cachedMotionLinesCount != motionLinesCount) {
@@ -539,7 +534,7 @@ MStatus MotionLinesNode::compute(const MPlug& plug, MDataBlock& data) {
 
             // Create cylinder segments between consecutive polyline points.
             for (unsigned int j = 0; j + 1 < polyLine.length(); j++) {
-                status = appendCylinder(polyLine[j], polyLine[j + 1],
+                status = appendCylinder(polyLine[j], polyLine[j + 1], cylinderRadius, 
                     mlPoints, mlFaceCounts, mlFaceConnects);
                 if (status != MS::kSuccess) {
                     MGlobal::displayError("Failed to append cylinder for motion line segment.");
@@ -655,7 +650,7 @@ const MStatus& MotionLinesNode::computeSimple(MStatus& status, MObject& inputObj
     const double strengthPast = data.inputValue(aStrengthPast).asDouble();
     const double strengthFuture = data.inputValue(aStrengthFuture).asDouble();
     const int segmentCount = 3;
-    const double cylinderRadius = 0.05;
+    const double cylinderRadius = data.inputValue(aRadius).asDouble();
 
     for (unsigned int s = 0; s < seedIndices.length(); s++) {
         int vertexIndex = seedIndices[s];
@@ -685,7 +680,7 @@ const MStatus& MotionLinesNode::computeSimple(MStatus& status, MObject& inputObj
 
         // Create cylinder segments between consecutive polyline points.
         for (unsigned int j = 0; j < polyLine.length() - 1; j++) {
-            status = appendCylinder(polyLine[j], polyLine[j + 1],
+            status = appendCylinder(polyLine[j], polyLine[j + 1], 2.0, 
                 mlPoints, mlFaceCounts, mlFaceConnects);
             if (status != MS::kSuccess) {
                 MGlobal::displayError("Failed to append cylinder for motion line segment.");

@@ -15,9 +15,7 @@
 #include <maya/MFnNumericAttribute.h>
 #include <maya/MDagPath.h>
 
-#include "smear.h" // Include the Smear header
-// Replace the vertex loop with parallel processing:
-//#include <tbb/parallel_for.h>
+#include "smear.h" 
 
 #define McheckErr(stat, msg)        \
     if (MS::kSuccess != stat) {     \
@@ -76,7 +74,7 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
 
     MStatus status;
 
-    // +++ Get time value +++
+    // Get time value
     MTime currentTime = data.inputValue(time, &status).asTime();
     McheckErr(status, "Failed to get time value");
     double frame = currentTime.as(MTime::kFilm);  // Get time in frames
@@ -118,7 +116,7 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kFailure;
     }
 
-    // +++ Compute motion offsets using Smear functions +++
+    // Compute motion offsets using Smear functions
     if (!motionOffsetsBaked) {
         status = Smear::computeMotionOffsetsSimple(shapePath, transformPath, motionOffsetsSimple);
         McheckErr(status, "Failed to compute motion offsets");
@@ -141,7 +139,7 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
         return MS::kFailure;
     }
 
-    // +++ Map motion offsets to colors +++
+    // Map motion offsets to colors
     MColorArray colors(numVertices);
     MIntArray vtxIndices(numVertices);
 
@@ -157,7 +155,7 @@ MStatus SmearNode::compute(const MPlug& plug, MDataBlock& data) {
     outputFn.createColorSetWithName(colorSet);
     outputFn.setCurrentColorSetName(colorSet);
 
-    // +++ Apply colors to specific color set +++
+    // Apply colors to specific color set
     status = outputFn.setVertexColors(colors, vtxIndices);
     McheckErr(status, "Failed to set colors");
 

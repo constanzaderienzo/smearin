@@ -58,7 +58,7 @@ public:
 
     // Helper function declarations for creating geometry
     MStatus setMotionLinesNone(const MPlug& plug, MDataBlock& data);
-    MObject MotionLinesNode::createMesh(const MTime& time, float angle, int stepSize, const MString& grammar, MObject& outData, MStatus& stat);
+    MObject createMesh(const MTime& time, float angle, int stepSize, const MString& grammar, MObject& outData, MStatus& stat);
     MStatus appendCylinder(MPoint start, MPoint end, double radius, MPointArray& points, MIntArray& faceCounts, MIntArray& faceConnects);
     MObject createQuads(const MFloatPointArray& points, MObject& outData, MStatus& stat);
     MObject createReverseQuads(const MFloatPointArray& points, MObject& outData, MStatus& stat);

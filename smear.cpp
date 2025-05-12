@@ -251,7 +251,7 @@ MStatus Smear::computeCentroidVelocity(const std::vector<MVector>& centroidPosit
 
     // Use the centroid positions to compute centroid velocity at each frame
     centroidVelocities.resize(numFrames - 1);
-    //MGlobal::displayInfo("Smear::computeCentroidVelocity - centroid positions");
+    // MGlobal::displayInfo("Smear::computeCentroidVelocity - centroid positions");
     for (int frame = 0; frame < numFrames - 1; ++frame) {
         centroidVelocities[frame] = centroidPositions[frame + 1] - centroidPositions[frame];
     }
@@ -308,22 +308,20 @@ MStatus Smear::calculatePerFrameMotionOffsets(const MPointArray& objectSpaceVert
 MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& transformPath, double frame, MPointArray& vertices) {
     MStatus status;
 
-    // 1. Set up frame evaluation context
+    // Set up frame evaluation context
     MTime evalTime(frame, MTime::kFilm);
     MDGContext ctx(evalTime);
-    //MGlobal::displayInfo(MString("Evaluating frame: ") + frame +
-        //" at time: " + evalTime.as(MTime::uiUnit()));
 
-    // 2. Get worldMatrix array plug
+    // Get worldMatrix array plug
     MFnDependencyNode transformFn(transformPath.node());
     MPlug worldMatrixPlug = transformFn.findPlug("worldMatrix", true, &status);
     McheckErr(status, "Failed to find worldMatrix plug");
 
-    // 3. Access first element of worldMatrix array
+    // Access first element of worldMatrix array
     MPlug elementPlug = worldMatrixPlug.elementByLogicalIndex(0, &status);
     McheckErr(status, "Failed to get worldMatrix[0]");
         
-    // 4. Get matrix data in context
+    // Get matrix data in context
     MObject matrixData;
     elementPlug.getValue(matrixData, ctx);
     if (matrixData.isNull()) {
@@ -331,19 +329,19 @@ MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& tra
         return MS::kFailure;
     }
 
-    // 5. Validate matrix data type
+    // Validate matrix data type
     if (!matrixData.hasFn(MFn::kMatrixData)) {
         MGlobal::displayError("Matrix data has incorrect type");
         return MS::kFailure;
     }
 
-    // 6. Extract matrix from data
+    // Extract matrix from data
     MFnMatrixData matrixFn(matrixData, &status);
     McheckErr(status, "Failed to create MFnMatrixData");
 
     MMatrix worldMatrix = matrixFn.matrix();
 
-    // 7. Get object-space vertices in context
+    // Get object-space vertices in context
     MFnDependencyNode shapeNode(shapePath.node());
     MPlug outMeshPlug = shapeNode.findPlug("outMesh", true, &status);
     McheckErr(status, "Failed to find outMesh plug");
@@ -355,7 +353,7 @@ MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& tra
         return MS::kFailure;
     }
 
-    // 8. Get object-space vertices
+    // Get object-space vertices
     MFnMesh meshFn(meshData, &status);
     McheckErr(status, "Failed to create MFnMesh")
 
@@ -363,7 +361,7 @@ MStatus Smear::getVerticesAtFrame(const MDagPath& shapePath, const MDagPath& tra
     status = meshFn.getPoints(objSpaceVerts, MSpace::kObject);
     McheckErr(status, "Failed to get object-space vertices");
 
-    // 9. Transform to world space
+    // Transform to world space
     vertices.setLength(objSpaceVerts.length());
     for (unsigned int i = 0; i < objSpaceVerts.length(); ++i) {
         vertices[i] = objSpaceVerts[i] * worldMatrix;
@@ -537,7 +535,7 @@ bool Smear::isMeshArticulated(const MDagPath& meshPath)
 {
     MStatus status;
 
-    // 1. Check if it has a skinCluster
+    // Check if it has a skinCluster
     MObject skinClusterObj;
     MDagPathArray influences;
     status = getSkinClusterAndBones(meshPath, skinClusterObj, influences);
@@ -546,7 +544,7 @@ bool Smear::isMeshArticulated(const MDagPath& meshPath)
         return false; // No skinCluster found
     }
 
-    // 2. Verify it has at least 2 influencing joints
+    // Verify it has at least 2 influencing joints
     if (influences.length() < 2) {
         return false; // Need at least 2 joints for articulation
     }
@@ -586,13 +584,11 @@ bool Smear::loadCache(const MString& cachePath)
         json data;
         file >> data;
 
-        //----------------------- header checks ------------------------
         if (!data.contains("vertex_count") || !data.contains("motion_offsets") || !data.contains("vertex_trajectories")) {
             MGlobal::displayError(MString("Cache loading failed: some fields not found"));
             return false;
         }
 
-        //----------------------- basic info ---------------------------
         vertexCount = data["vertex_count"];
         cacheFPS = data.value("baked_frame_rate", 24.0);
         int startFrame = data.value("start_frame", 0);
@@ -601,7 +597,6 @@ bool Smear::loadCache(const MString& cachePath)
         int numFrames = endFrame - startFrame + 1;
 
         vertexCache.clear();
-        //----------------------- vertex positions ---------------------
         const json& vertex_trajectories = data["vertex_trajectories"];
         for (const auto& [frameStr, positions] : vertex_trajectories.items())
         {
@@ -619,7 +614,6 @@ bool Smear::loadCache(const MString& cachePath)
                 fCache.positions.emplace_back(pos[0], pos[1], pos[2]);
         }
 
-        //----------------------- motion offsets ------------
         for (const auto& [frameStr, offsets] : data["motion_offsets"].items())
         {
             int frame = std::stoi(frameStr);

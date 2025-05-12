@@ -39,7 +39,7 @@ This will install NumPy into Maya's embedded Python environment.
 
 class PluginMain : public MPxCommand {
 private: 
-    MColor PluginMain::motionOffsetToColor(const MVector& offset) {
+    MColor motionOffsetToColor(const MVector& offset) {
         // Normalize the offset to get the direction
         MVector direction = offset.normal();
 
